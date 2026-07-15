@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host-tests:
+    name: Host unit tests (pure-C components)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run
+        run: make -C test/host test
+
+  firmware:
+    name: ESP-IDF build (all apps)
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.3.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build all firmware apps
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
+          . "$IDF_PATH/export.sh"
+          ./tools/ci_build_apps.sh
+
+  sim:
+    name: Radar simulator build + smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and smoke-test
+        run: |
+          if [ ! -f sim/Makefile ]; then
+            echo "Simulator not implemented yet (T07) - skipping."
+            exit 0
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq libsdl2-dev
+          make -C sim
+          make -C sim smoke
