@@ -22,9 +22,9 @@ two cars show each other on radar.
   (change only past 90 % boundary, ≥ 2 s apart); AUX short-press cycles
   modes via ctrl_task event
 - `ctrl_task.c` — real implementation: PTT/AUX debounce (50 ms), AUX
-  short vs 2 s hold (hold → backlight cycle 100/60/25 %), events to a
-  small `ctrl_evt` queue consumed by ui/audio tasks. PTT events are
-  produced but consumed by nothing until T18 (log them)
+  short vs 2 s hold (hold → backlight cycle 100/60/25 %), events to
+  `ctrl_q` consumed by ui/voice tasks. PTT events are produced but
+  consumed by nothing until T18 (log them)
 - Own-position marker uses live GPS fix (1 Hz) between beacons; course
   arrow validity per `CL_COURSE_VALID_DM_S`
 
@@ -52,5 +52,5 @@ Field (two cars, 30 min drive):
 
 ## Out of scope
 
-Voice (T18/T19), night-mode polish and off-scale arrow tuning beyond what
+Voice (T18), night-mode polish and off-scale arrow tuning beyond what
 T06 already renders (T20).

@@ -1,47 +1,53 @@
-# T13 — `bringup_audio` app: tone / meter / echo / switch bench
+# T13 — `bringup_voice` app: channel / PTT / RSSI exerciser
+
+*(v2: replaces the original `bringup_audio` ADC/DAC bench — voice moved to
+the analog SA818 module, `docs/00` decision log. Filename kept for queue
+stability.)*
 
 **Depends:** T12 · **Phase:** M3
-**Required reading:** `docs/04-audio.md`; `docs/02` §Audio wiring
+**Required reading:** `docs/04-voice-sa818.md`; `docs/02` §SA818 wiring
 
 ## Goal
 
-Prove the whole analog chain (MAX9814 → ADC, DAC → PAM8403 → speaker) and
-measure the half-duplex mode-switch — the number that decides whether the
-voice design flies.
+Prove the SA818 end to end on real hardware: channel programming, PTT
+keying, and that a human voice actually gets from one unit's mic to
+another unit's speaker.
 
 ## Deliverables
 
-- `firmware/apps/bringup_audio/…` (copy the app template)
+- `firmware/apps/bringup_voice/…` (copy the app template)
 
 ## Behaviour (console commands)
 
 | Command | Action |
 |---|---|
-| `tone [hz] [s]` | PLAYBACK mode; synthesize sine (default 440 Hz, 2 s, 50 % FS) through `aio_write` |
-| `meter` | CAPTURE mode; 10×/s print RMS + peak as a bar: `mic ▏█████░░░░░▕ rms=1234 pk=8100`; Enter stops |
-| `echo [s]` | record N s (default 3) of mic to RAM (16 KB/s), switch modes, play it back — the end-to-end proof |
-| `switch [n]` | bench: alternate CAPTURE↔PLAYBACK n times (default 100), report min/avg/**max** switch µs; FAIL line if max ≥ 100 ms |
-| `vol <0-100>` | playback volume |
+| `chan <plan> <n>` | `sa818_set_channel()` from the `docs/04` table (e.g. `chan PMR446 3`) |
+| `ptt on\|off` | key/unkey manually — talk while `on`, listen while `off` |
+| `rssi` | one-shot `sa818_rssi()` print |
+| `mon` | 5×/s print of RSSI + carrier-present while idle, until Enter |
+| `vol <1-8>` | `sa818_set_volume()` |
+| `holdtx <s>` | key PTT for exactly `s` seconds then release (burn-in / thermal check) |
 
 ## Acceptance — CI
 
 `./tools/ci_build_apps.sh` green.
 
-## Acceptance — hardware (owner checklist)
+## Acceptance — hardware (owner checklist, needs 2 units)
 
-- [ ] `tone` — clean tone from speaker, no gross distortion at vol 70
-- [ ] `tone 3000` audible, `tone 200` audible (speaker band sanity)
-- [ ] `meter` — quiet room rms < 300; speaking at arm's length swings
-      peak > 5000 without pegging at 32767 (if pegged: MAX9814 gain
-      jumper down / move mic)
-- [ ] `echo` — recorded speech plays back intelligibly (this is the
-      voice-quality preview: it's 12-bit/8 kHz — walkie-talkie, not hi-fi)
-- [ ] `switch 100` — max switch time printed and **< 100 ms** ← the gate.
-      Record the number in `tasks/STATUS.md`. If it fails, T12 falls back
-      to the esp_timer/dac_oneshot path (docs/04) before M5 proceeds
-- [ ] Engine-noise dry run optional: run `meter` in a car at speed, note
-      rms floor (informs squelch/gain tuning later)
+- [ ] `chan PMR446 3` on both units, `unitcfg show`-equivalent confirms
+      same frequency/CTCSS
+- [ ] Unit A `ptt on`, speak, `ptt off`: unit B's speaker plays it back
+      intelligibly with no ESP32 code in the audio path
+- [ ] `mon` on B shows `carrier_present` flip true while A transmits
+- [ ] Swap roles, confirm both directions
+- [ ] `holdtx 60` — module stays warm, not hot; if it's too hot to touch,
+      add/upsize the heatsink before longer sessions
+- [ ] A cheap PMR446 handheld set to the same channel+CTCSS hears the
+      unit and is heard by it (interop sanity, docs/04)
+- [ ] Range walk: note distance where speech becomes unreadable through
+      static — record in `tasks/STATUS.md` next to the LoRa figure from T10
 
 ## Out of scope
 
-Radio, ADPCM, PTT button handling (T18).
+LoRa/GPS/display, PTT-button-to-state-machine wiring (T18), any
+DSP/codec work (there is none).

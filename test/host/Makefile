@@ -18,9 +18,6 @@ INC_test_convoy_proto  := -I$(FW)/convoy_proto/include
 SRCS_test_convoy_geo := $(FW)/convoy_geo/convoy_geo.c
 INC_test_convoy_geo  := -I$(FW)/convoy_geo/include -I$(FW)/convoy_proto/include
 
-SRCS_test_adpcm := $(FW)/adpcm/adpcm.c
-INC_test_adpcm  := -I$(FW)/adpcm/include -I$(FW)/convoy_proto/include
-
 SRCS_test_nmea := $(FW)/nmea/nmea.c
 INC_test_nmea  := -I$(FW)/nmea/include -I$(FW)/convoy_proto/include
 

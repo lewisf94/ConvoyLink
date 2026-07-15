@@ -50,7 +50,7 @@ Un-provisioned units boot as `U? --`, transmit nothing, and show a
 make -C test/host          # builds + runs every test binary; non-zero exit on failure
 ```
 
-Pure-C components (`convoy_proto`, `convoy_geo`, `adpcm`, `nmea`,
+Pure-C components (`convoy_proto`, `convoy_geo`, `nmea`,
 `neighbor_table`, `radar_render`) get their tests here. Adding a component
 test: drop `test_<name>.c` into `test/host/` — the Makefile picks up
 `test_*.c` automatically and links sources listed in its `SRCS_<name>`

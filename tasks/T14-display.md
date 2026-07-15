@@ -25,8 +25,8 @@ strip model, plus backlight PWM.
 #include <stdint.h>
 
 /* VSPI (SPI3_HOST) @ 40 MHz on CONVOY_PIN_TFT_*, portrait 240x320,
- * USB-down orientation per docs/06. Initialises the SPI bus (touch will
- * share it later — bus config must leave room for a second device). */
+ * USB-down orientation per docs/06. Owns the SPI bus (the display is its
+ * only device in v2 — touch is descoped, docs/02). */
 esp_err_t disp_init(void);
 
 /* Blocking flush of one strip of RR_W-wide RGB565 pixels to rows

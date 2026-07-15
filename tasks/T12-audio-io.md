@@ -1,63 +1,61 @@
-# T12 — `audio_io`: half-duplex capture/playback component
+# T12 — `sa818` component: voice module control
 
-**Depends:** none · **Phase:** M3 — **the project's #1 hardware risk;
-read `docs/04-audio.md` §ESP-IDF driver constraints before anything else.**
-**Required reading:** `docs/04-audio.md` (all); `docs/02` §Audio wiring
+*(v2: replaces the original `audio_io` ADC/DAC component — voice moved to
+the analog SA818 module, `docs/00` decision log. Filename kept for queue
+stability.)*
+
+**Depends:** none · **Phase:** M3
+**Required reading:** `docs/04-voice-sa818.md` (all); `docs/02` §SA818 wiring
 
 ## Goal
 
-Own the ESP32's built-in ADC (mic in) and DAC (speaker out) through the
-IDF v5 continuous-mode drivers, switching between them on demand
-(half-duplex), presenting clean 8 kHz mono int16 PCM both ways.
+UART command/response driver for the SA818S-U: channel configuration,
+PTT control, RSSI polling. This is the entire "voice" firmware surface —
+no audio samples are ever handled in code.
 
 ## Deliverables
 
-- `firmware/components/audio_io/include/audio_io.h`
-- `firmware/components/audio_io/audio_io.c`
-- `firmware/components/audio_io/CMakeLists.txt`
-  (REQUIRES esp_adc, esp_driver_dac or driver, convoy_pins)
+- `firmware/components/sa818/include/sa818.h`
+- `firmware/components/sa818/sa818.c`
+- `firmware/components/sa818/CMakeLists.txt` (REQUIRES driver, convoy_pins)
 
 ## Interface contract
 
 ```c
 #include "esp_err.h"
+#include <stdbool.h>
 #include <stdint.h>
-#include <stddef.h>
 
-typedef enum { AIO_OFF, AIO_CAPTURE, AIO_PLAYBACK } aio_mode_t;
+typedef struct {
+    uint8_t bw;            /* 0 = 12.5 kHz (all v1 channel plans use this) */
+    uint32_t freq_hz_x10;  /* e.g. 4460562 for 446.05625 MHz, fits exactly */
+    uint8_t ctcss_code;    /* 0 = none, else per SA818 CTCSS table */
+    uint8_t squelch;       /* 0..8 */
+} sa818_channel_t;
 
-esp_err_t aio_init(void);                 /* allocates all buffers once   */
-/* Tears down the current driver, brings up the requested one. Logs and
- * returns the measured switch time; must be < 100 ms (docs/04). */
-esp_err_t aio_set_mode(aio_mode_t m, uint32_t *switch_us_out);
-aio_mode_t aio_mode(void);
+/* UART1 init on CONVOY_PIN_VHF_* @ 9600 8N1, PTT GPIO to RX (idle high),
+ * AT+DMOCONNECT handshake (retry x3, 500 ms apart). */
+esp_err_t sa818_init(void);
 
-/* CAPTURE: blocking read of up to max conditioned samples (DC-removed,
- * gain-scaled, soft-clipped int16 @ 8 kHz). Returns count, 0 on timeout,
- * -1 if not in CAPTURE. */
-int aio_read(int16_t *pcm, size_t max, uint32_t wait_ms);
+/* AT+DMOSETGROUP with tx==rx (simplex). Re-sent automatically by
+ * sa818_init's caller after any esp_err_t failure from this function. */
+esp_err_t sa818_set_channel(const sa818_channel_t *ch);
 
-/* PLAYBACK: blocking write of 8 kHz int16 samples (internally ZOH x4 to
- * 32 kHz, converted to 8-bit unsigned for the DAC, volume-scaled by
- * aio_set_volume). Returns samples accepted. */
-int aio_write(const int16_t *pcm, size_t n, uint32_t wait_ms);
-void aio_set_volume(uint8_t pct);         /* 0..100, default from cfg     */
+esp_err_t sa818_set_volume(uint8_t vol_1_to_8);
+
+/* Drives the PTT GPIO directly (docs/02: low = TX). No UART round trip -
+ * this must be fast and glitch-free. */
+void sa818_ptt(bool transmit);
+
+/* AT+RSSI? parsed to a 0-255-ish module-reported value; carrier_present
+ * applies CL_VOICE_SQUELCH_DEFAULT-consistent thresholding (docs/04). */
+esp_err_t sa818_rssi(uint8_t *raw_out, bool *carrier_present);
 ```
 
-Implementation constraints (binding, from docs/04):
-
-- Capture: `adc_continuous` on ADC1 ch 6 (GPIO 34), 12-bit, 12 dB atten,
-  8 kHz, conversion frames a multiple of 44 samples. Conditioning chain
-  exactly: DC tracker `dc += (x - dc) >> 9`, scale `<<4`, optional ×2 gain
-  (compile-time), soft-clip.
-- Playback: `dac_continuous` on DAC ch 1 (GPIO 25) at `CL_DAC_RATE_HZ`
-  (32 kHz) — the DAC DMA driver cannot run at 8 kHz directly; every input
-  sample is written 4×. Idle: emit midscale then stop — no busy loop.
-- The two drivers cannot coexist (both need I2S0's DMA on classic ESP32) —
-  `aio_set_mode` must fully deinit one before init'ing the other, and must
-  be idempotent and safe to call from one task only (document owner:
-  `audio_task`).
-- No allocation after `aio_init`. Measure switch time with `esp_timer`.
+Implementation notes: all AT commands end `\r\n`, expect a `+DMO…:0`
+reply within 500 ms (timeout → `ESP_ERR_TIMEOUT`, caller retries per
+docs/04); no dynamic allocation; `sa818_ptt` never touches UART, only the
+GPIO, so it can't be delayed by a pending command.
 
 ## Acceptance — CI
 
@@ -65,8 +63,9 @@ Implementation constraints (binding, from docs/04):
 
 ## Acceptance — hardware
 
-Via T13's checklist (tone, meter, echo, switch-time bench).
+Deferred to T13's checklist (channel set, PTT key, RSSI read).
 
 ## Out of scope
 
-ADPCM (T02), packetisation/jitter (T18/T19), volume UI.
+PTT state machine / UI wiring (T18), carrier-detect polling loop (T18's
+`voice_task`), any audio signal path (there isn't one in firmware).

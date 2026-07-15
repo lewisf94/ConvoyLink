@@ -23,9 +23,10 @@ tunables informed by real five-unit data.
     BUSY etiquette, regroup procedure when someone goes GHOST
     (last-known position + age is exactly what the radar preserves)
   - Troubleshooting quick table (symptom → docs/07 reference)
-  - Legal note: 2.4 GHz ISM operation, region-dependent duty/power rules —
-    owner verifies local regulations; no multi-km promises (docs/00 range
-    reality restated honestly)
+  - Legal note: restate the docs/03 LoRa regulatory table and the docs/04
+    voice channel-plan table (PMR446/ham/GMRS/UHF-CB) — owner verifies
+    local regulations and confirms every unit's region/channel/power
+    jumper matches; range expectations restated honestly (docs/00)
 - Tuning pass (only with owner-supplied five-unit field data): revisit
   `convoy_cfg.h` values — beacon jitter, relay window, busy hangover,
   staleness thresholds, zoom hysteresis — change only what field notes

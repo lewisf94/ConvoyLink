@@ -13,7 +13,7 @@ the ignition. Up to 5 cars.
 
 ```
  ┌──────────────────────┐
- │ U0 LF     9◦    ◂AM  │   ← you, GPS sats, who's talking
+ │ U0 LF     9◦    ◂RX  │   ← you, GPS sats, someone's talking
  │      · · N · ·       │
  │    ·     ¹ᵏᵐ    ·    │
  │   ·   AM●        ·   │   ← convoy on radar,
@@ -24,16 +24,15 @@ the ignition. Up to 5 cars.
  └──────────────────────┘
 ```
 
-## How it works
+## How it works (v2 two-radio architecture)
 
 | Subsystem | Choice |
 |---|---|
 | MCU | ESP32-WROOM-32 (classic, 30-pin devkit) — ESP-IDF v5.3, no Arduino |
-| Radio | NRF24L01+ PA/LNA, 2.476 GHz, 250 kbps, fixed 32-byte broadcast frames — one link carries **both** voice and GPS |
-| Voice | PTT, 8 kHz mono IMA ADPCM, per-packet codec state (loses 5.5 ms per lost packet, nothing more), ~30 ms end-to-end |
-| Positions | NEO-6M GPS, beacon every 5 s, **single-hop relay through middle cars** stretches radar coverage past direct radio range |
+| Position link | **LoRa** (Semtech SX1262, EBYTE E22-900M22S) @ 869/915 MHz — 32-byte beacons every 5 s, **single-hop relay through middle cars**. Same radio class Meshtastic proves at 1–5 miles car-to-car |
+| Voice | **Analog UHF FM** (NiceRF SA818S-U) — a complete walkie-talkie module; the ESP32 keys PTT and sets channel/CTCSS over UART, so firmware contains **zero audio code**. Channel plan is region config (PMR446 / ham / GMRS / UHF-CB — docs/04) |
 | Display | 2.8" ILI9341 SPI, 5 Hz strip-rendered radar with range rings, compass, staleness tiers (live → stale → ghost — dots age, they don't vanish) |
-| Range honesty | Realistically **300 m – 1 km** car-to-car (docs/00 §Range reality). Out-of-range cars show as ghosts with "last seen"; the protocol is transport-agnostic for future SA818/LoRa experiments |
+| Range honesty | Radar **2–5 km** typical (more relayed / line-of-sight), voice **1–5 km** — terrain and antenna placement dominate (docs/00 §Range expectations, docs/02 §Antennas) |
 
 ## Repository tour
 
@@ -43,14 +42,18 @@ the ignition. Up to 5 cars.
 | `ROADMAP.md` | Milestones M1–M6 with gates |
 | `tasks/` | The implementation queue: 21 self-contained task specs with interface contracts + acceptance tests, designed for execution by AI coding agents (`CLAUDE.md` holds the standing rules). `tasks/STATUS.md` is the live board |
 | `firmware/` | ESP-IDF components + apps (`convoylink` + per-subsystem `bringup_*` test firmwares) |
-| `test/host/` | gcc/ASan unit tests for the pure-C core (protocol, geo, codec, parser, renderer) — no hardware needed |
+| `test/host/` | gcc/ASan unit tests for the pure-C core (protocol, geo, parser, renderer) — no hardware needed |
 | `sim/` | SDL2 desktop simulator: the real radar code fed by scripted GPS scenarios (arrives in T07) |
 
 ## Status
 
-Scaffold complete: docs, task queue, CI, and the `convoy_proto` wire-format
+Scaffold complete on the **v2 two-radio architecture** (LoRa positions +
+analog UHF voice — see the decision log in `docs/00-brief.md` for why NRF24
+was retired): docs, task queue, CI, and the `convoy_proto` wire-format
 component (host-tested, 9/9). Implementation proceeds through
-`tasks/STATUS.md` — milestone M1 (pure-C libraries) is next.
+`tasks/STATUS.md` — milestone M1 (pure-C libraries) is next. New hardware
+to order per unit: an SX1262 LoRa module, an SA818S-U voice module, and
+two whip antennas (~£25–35/unit — `docs/00` §Owned hardware).
 
 ## Quick start (contributors / agents)
 
