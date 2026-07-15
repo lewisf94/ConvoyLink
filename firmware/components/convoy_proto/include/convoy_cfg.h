@@ -11,27 +11,33 @@
 /* --- Convoy shape (docs/00) ------------------------------------------- */
 #define CL_MAX_UNITS 5 /* unit ids 0..4 */
 
-/* --- Radio (docs/03) --------------------------------------------------- */
-#define CL_RF_CHANNEL 76 /* 2.476 GHz */
-#define CL_RF_ADDR \
-    { 0x43, 0x4C, 0x4E, 0x4B, 0x31 } /* "CLNK1", shared broadcast */
-#define CL_PKT_SIZE 32               /* fixed payload, always   */
+/* --- LoRa data link, SX1262 (docs/03) ----------------------------------- */
+#define CL_PKT_SIZE 32 /* fixed payload, always     */
+
+/* Region is a runtime NVS setting (docs/07 provisioning); these are the
+ * per-region radio profiles it selects between. */
+#define CL_LORA_FREQ_EU_HZ 869525000 /* 869.40-869.65 sub-band: 500 mW, 10% duty */
+#define CL_LORA_FREQ_US_HZ 915000000 /* 902-928 ISM: no duty limit    */
+#define CL_LORA_SF 7                 /* SF7/BW125/CR4:5 ~= 61 ms/beacon */
+#define CL_LORA_BW_KHZ 125
+#define CL_LORA_CR 5                 /* 4/5                             */
+#define CL_LORA_PREAMBLE 8
+#define CL_LORA_SYNC_PRIVATE 0x12
+#define CL_LORA_TX_DBM 22
 
 #define CL_BEACON_PERIOD_MS 5000
 #define CL_BEACON_JITTER_MS 200  /* +/- applied per beacon   */
-#define CL_BEACON_DEFER_MAX_MS 250
-#define CL_RELAY_DELAY_MIN_MS 80 /* relay backoff window     */
-#define CL_RELAY_DELAY_MAX_MS 280
-#define CL_BUSY_HANGOVER_MS 300 /* channel-busy after last voice frame */
+#define CL_RELAY_DELAY_MIN_MS 150 /* relay backoff window (> beacon airtime) */
+#define CL_RELAY_DELAY_MAX_MS 450
 
-/* --- Audio (docs/04) ---------------------------------------------------- */
-#define CL_AUDIO_RATE_HZ 8000
-#define CL_FRAME_SAMPLES 44 /* per cl_voice_t packet     */
-#define CL_DAC_RATE_HZ 32000 /* ZOH x4 upsample           */
-#define CL_JITTER_SLOTS 16
-#define CL_JITTER_PREFILL 3
-#define CL_CONCEAL_MAX 3 /* consecutive concealed frames */
-#define CL_TX_MAX_MS 60000 /* stuck-PTT guard           */
+/* --- Voice, SA818 analog UHF (docs/04) ---------------------------------- */
+/* Frequency/power/CTCSS are runtime region+channel settings stored in NVS
+ * (docs/04 has the legal options table). Defaults: */
+#define CL_VOICE_CTCSS_DEFAULT 8   /* CTCSS code 8 = 88.5 Hz            */
+#define CL_VOICE_SQUELCH_DEFAULT 4 /* SA818 SQ level 0-8                */
+#define CL_VOICE_RSSI_POLL_MS 150  /* carrier-detect poll while idle    */
+#define CL_BUSY_HANGOVER_MS 500    /* channel-busy after carrier drops  */
+#define CL_TX_MAX_MS 60000         /* stuck-PTT guard                   */
 
 /* --- Neighbour staleness tiers (docs/05) -------------------------------- */
 #define NT_STALE_MS 15000u  /* LIVE  below this          */

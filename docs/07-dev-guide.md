@@ -32,11 +32,15 @@ in T15):
 
 ```
 convoy> unitcfg set 2 JD        # unit_id 2, initials "JD"
+convoy> unitcfg region EU       # EU | US | AU — selects the LoRa frequency (docs/03)
+convoy> unitcfg voice PMR446 3  # channel plan + channel number (docs/04 table)
 convoy> unitcfg show
-unit_id=2 initials=JD
+unit_id=2 initials=JD region=EU voice=PMR446 ch3 (446.05625 MHz, CTCSS 88.5)
 ```
 
 Valid ids: 0–4, unique per convoy. Initials: exactly 2 ASCII chars A–Z/0–9.
+All five units must share the same region and voice channel. Remember the
+SA818 H/L power jumper must match the plan (docs/02, docs/04).
 Un-provisioned units boot as `U? --`, transmit nothing, and show a
 `PROVISION ME` banner.
 
@@ -78,18 +82,20 @@ A task is not done until CI is green (`tasks/README.md`).
 
 | Symptom | Likely cause / fix |
 |---|---|
-| Boot loop with peripherals attached, fine bare | Strapping pin pulled — check nothing sits on GPIO 12, and GPIO 2/15 wiring matches `docs/02` |
-| `flash read err` / brownout resets | Buck A undervolt or USB+12 V fight; measure 5 V under load |
-| NRF24 registers read `0x00`/`0xFF` | 3.3 V rail B missing/dirty, missing caps, or MISO not on GPIO 35 — run `bringup_radio` register dump |
-| Radio "works on the bench, garbage in the car" | Supply noise — caps at the module, shorter leads, dedicated buck |
+| Boot loop with peripherals attached, fine bare | Strapping pin pulled — check nothing sits on GPIO 12, AUX/BOOT not held, and GPIO 2/15 wiring matches `docs/02` |
+| `flash read err` / brownout resets | Buck A undervolt or USB+12 V fight; measure 5 V under load (SA818 TX pulls ~1 A) |
+| SX1262 init fails / BUSY stuck high | 3.3 V rail B missing/dirty, NRST not on GPIO 27, or TXEN/RXEN swapped — run `bringup_radio` |
+| LoRa "works on the bench, deaf in the car" | Antenna flat instead of vertical, or supply noise — caps at the module, window mount |
+| SA818 ignores AT commands | TX/RX crossed (ESP32 TX→module RXD), PD not tied high, or 9600 baud mismatch — run `bringup_voice` |
+| Your voice transmits with hum | SA818 supply decoupling missing (220 µF at module), or mic leads running beside the power wiring |
+| Nobody hears you / you hear nobody | Channel/CTCSS mismatch between units (`unitcfg show` on both), H/L jumper, or squelch too high |
 | No GPS fix | Needs sky. Cold start can take minutes; check `bringup_gps` shows sentences (module OK) vs silence (wiring) |
 | Display stays white | RESET/DC swapped, or CS not on GPIO 5; run `bringup_display` |
-| Mic buzzes at idle | Ground loop / leads too long; star-ground at buck A output, twist mic pair |
-| Clicks on PTT press/release | Expected small artefact from ADC↔DAC mode switch; must be < 100 ms (T12 measures it) |
 | `idf.py` not found | Shell missing `. ~/esp-idf/export.sh` |
 
 ## Serial console conventions
 
 115200 baud. Log tags = component names (`ESP_LOGI(TAG, ...)`).
-Default level INFO; `radio` and `audio` drop to WARN in release builds
-(they log per-packet at DEBUG only — never at INFO, it starves the console).
+Default level INFO; `radio` and `voice` drop to WARN in release builds
+(per-packet / per-poll logging at DEBUG only — never at INFO, it starves
+the console).

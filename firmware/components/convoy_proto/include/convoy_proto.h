@@ -30,7 +30,8 @@
 
 typedef enum {
     CL_TYPE_BEACON = 1,
-    CL_TYPE_VOICE = 2,
+    /* 2 is reserved: was digital voice before the v2 architecture moved
+     * voice to the analog SA818 link (docs/00 decision log). Never reuse. */
     CL_TYPE_PING = 3,
 } cl_type_t;
 
@@ -43,16 +44,12 @@ typedef enum {
     CL_ERR_FIELD = -5,   /* a field is out of its documented range */
 } cl_err_t;
 
-/* Voice hdr.meta flag bits */
-#define CL_VOICE_F_START 0x01u
-#define CL_VOICE_F_END 0x02u
-
 /* ---- Common header (4 bytes) ------------------------------------------ */
 typedef struct __attribute__((packed)) {
     uint8_t magic;    /* CL_MAGIC                                  */
     uint8_t ver_type; /* (CL_PROTO_VER << 4) | cl_type_t           */
     uint8_t sender;   /* unit id 0..CL_MAX_UNITS-1                 */
-    uint8_t meta;     /* beacon: hop (0|1); voice: CL_VOICE_F_*    */
+    uint8_t meta;     /* beacon: hop (0|1); ping: unused           */
 } cl_hdr_t;
 
 /* ---- CL_TYPE_BEACON ---------------------------------------------------- */
@@ -73,17 +70,6 @@ typedef struct __attribute__((packed)) {
 #define CL_COURSE_INVALID 0xFFFFu
 #define CL_BEACON_HOP_MAX 1u
 
-/* ---- CL_TYPE_VOICE ------------------------------------------------------ */
-#define CL_VOICE_ADPCM_BYTES 22
-typedef struct __attribute__((packed)) {
-    cl_hdr_t hdr;
-    uint16_t seq;       /* per-sender, monotonic across bursts     */
-    int16_t predictor;  /* IMA ADPCM state at frame start          */
-    uint8_t step_index; /* 0..88                                   */
-    uint8_t n_samples;  /* 1..CL_FRAME_SAMPLES                     */
-    uint8_t adpcm[CL_VOICE_ADPCM_BYTES]; /* low nibble = earlier   */
-} cl_voice_t;
-
 /* ---- CL_TYPE_PING (range testing) --------------------------------------- */
 typedef struct __attribute__((packed)) {
     cl_hdr_t hdr;
@@ -94,7 +80,6 @@ typedef struct __attribute__((packed)) {
 
 _Static_assert(sizeof(cl_hdr_t) == 4, "cl_hdr_t must be 4 bytes");
 _Static_assert(sizeof(cl_beacon_t) == CL_PKT_SIZE, "beacon must be 32 bytes");
-_Static_assert(sizeof(cl_voice_t) == CL_PKT_SIZE, "voice must be 32 bytes");
 _Static_assert(sizeof(cl_ping_t) == CL_PKT_SIZE, "ping must be 32 bytes");
 
 /* ---- API ---------------------------------------------------------------- */
@@ -131,11 +116,6 @@ void cl_make_beacon(cl_beacon_t *out, uint8_t sender, uint16_t seq,
 
 /** Rewrite a received hop-0 beacon as its hop-1 relay copy (docs/03). */
 void cl_beacon_to_relay(cl_beacon_t *b);
-
-/** Fill a voice frame header; adpcm[] payload is written by the caller. */
-void cl_make_voice_hdr(cl_voice_t *out, uint8_t sender, uint16_t seq,
-                       int16_t predictor, uint8_t step_index,
-                       uint8_t n_samples, uint8_t flags);
 
 /** Fill a ping packet (bring-up range testing). */
 void cl_make_ping(cl_ping_t *out, uint8_t sender, uint16_t seq,

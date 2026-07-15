@@ -1,14 +1,16 @@
-# T09 — `nrf24` driver + `convoy_pins`
+# T09 — `sx1262` LoRa driver + `convoy_pins`
+
+*(v2: this task originally targeted the NRF24L01+; the SX1262 replaced it —
+`docs/00` decision log. Filename kept for queue stability.)*
 
 **Depends:** none · **Phase:** M3 (ESP-IDF)
 **Required reading:** `docs/03-radio-protocol.md` §Radio configuration +
-§Driver notes; `docs/02-hardware.md` §Pin map
+§Driver notes; `docs/02-hardware.md` §Pin map + §SX1262 wiring
 
 ## Goal
 
-A thin, IRQ-driven NRF24L01+ driver — SPI register protocol, fixed 32-byte
-no-ACK broadcast, single-owner API — plus the shared pin-map header every
-app uses.
+The LoRa data radio behind a small single-owner API, plus the shared
+pin-map header every app uses.
 
 ## Deliverables
 
@@ -16,77 +18,72 @@ app uses.
   component: `#define CONVOY_PIN_<NET> <gpio>` for **every** row of the
   docs/02 pin table, plus `CMakeLists.txt`
   (`idf_component_register(INCLUDE_DIRS "include")`).
-- `firmware/components/nrf24/include/nrf24.h`
-- `firmware/components/nrf24/nrf24.c`
-- `firmware/components/nrf24/CMakeLists.txt` (REQUIRES driver)
+- `firmware/components/sx1262/` — the driver component:
+  - `vendor/` — the MIT-licensed core of
+    <https://github.com/nopnop2002/esp-idf-sx126x> (its `ra01s.c/.h`
+    driver files), copied verbatim with licence header intact and a
+    `NOTICE` file recording origin + commit. This is the task's one
+    allowed external dependency.
+  - `include/sx1262.h` + `sx1262.c` — our wrapper (below), the only API
+    the rest of the firmware may use.
+  - `CMakeLists.txt` (REQUIRES driver, convoy_pins)
 
-## Interface contract
+## Interface contract (`sx1262.h`)
 
 ```c
-#include "driver/gpio.h"
-#include "driver/spi_master.h"
 #include "esp_err.h"
+#include <stdbool.h>
+#include <stdint.h>
 
-typedef struct {
-    spi_host_device_t host;      /* SPI2_HOST (HSPI) per docs/02          */
-    int sck, mosi, miso, csn, ce, irq;
-} nrf24_pins_t;
+/* Configures SPI + control pins from convoy_pins.h and programs the full
+ * docs/03 table: freq_hz (region-selected by the caller from convoy_cfg),
+ * SF7/BW125/CR4:5, preamble 8, private sync word, +22 dBm, CRC on,
+ * fixed 32-byte payloads. Drives the E22's TXEN/RXEN switch pins around
+ * every mode change. Ends in continuous-RX mode. */
+esp_err_t sx1262_init(uint32_t freq_hz);
 
-esp_err_t nrf24_init(const nrf24_pins_t *pins, uint8_t channel,
-                     const uint8_t addr[5]);   /* ends in RX mode        */
-esp_err_t nrf24_send(const uint8_t payload[32]); /* blocking <= ~3 ms;
-                     returns to RX mode; ESP_ERR_TIMEOUT if TX_DS never fires */
-bool      nrf24_receive(uint8_t out[32], uint32_t wait_ms); /* from the
-                     driver's internal RX queue (depth 8, drop-oldest)   */
-bool      nrf24_rpd(void);          /* received-power flag, range app    */
-uint8_t   nrf24_read_reg(uint8_t reg);
-void      nrf24_dump_regs(void);    /* ESP_LOGI table of key registers   */
+/* Blocking send of one 32-byte payload (~61 ms + margin, 200 ms timeout).
+ * Returns to continuous RX afterwards. */
+esp_err_t sx1262_send(const uint8_t payload[32]);
+
+/* Pop one received packet from the driver's internal queue (depth 8,
+ * drop-oldest), filled by the DIO1 interrupt path. rssi/snr are the
+ * per-packet values from the modem; either pointer may be NULL. */
+bool sx1262_receive(uint8_t out[32], int16_t *rssi_dbm, int8_t *snr_db,
+                    uint32_t wait_ms);
+
+/* Cheap listen-before-talk hint: true if a reception is in progress
+ * (preamble/header detected or modem busy in RX). */
+bool sx1262_channel_active(void);
+
+void sx1262_dump_status(void); /* ESP_LOGI: chip mode, errors, freq */
 ```
 
-Concurrency contract (document in the header): `nrf24_init` once from
-startup; afterwards **only one task** may call send/receive (radio_task /
-the bring-up app's main loop). ISR does no SPI — it releases a semaphore;
-an internal driver task (prio 13, core 1) drains the RX FIFO into the
-queue and clears STATUS flags, also draining on a 50 ms poll as
-missed-IRQ insurance.
+Concurrency contract (document in the header): `sx1262_init` once from
+startup; afterwards **only `radio_task`** (or the bring-up app's main
+loop) may call send/receive. The DIO1 ISR does no SPI — it releases a
+semaphore; a small internal task reads the FIFO and pushes to the queue.
 
-## Register map (from the nRF24L01+ datasheet — use these, do not invent)
+## Implementation notes
 
-Commands: `R_REGISTER 0x00|r` `W_REGISTER 0x20|r` `R_RX_PAYLOAD 0x61`
-`W_TX_PAYLOAD 0xA0` `FLUSH_TX 0xE1` `FLUSH_RX 0xE2` `NOP 0xFF`.
-Registers: CONFIG 0x00, EN_AA 0x01, EN_RXADDR 0x02, SETUP_AW 0x03,
-SETUP_RETR 0x04, RF_CH 0x05, RF_SETUP 0x06, STATUS 0x07, OBSERVE_TX 0x08,
-RPD 0x09, RX_ADDR_P0 0x0A, TX_ADDR 0x10, RX_PW_P0 0x11, FIFO_STATUS 0x17,
-DYNPD 0x1C, FEATURE 0x1D.
-CONFIG bits: 6 MASK_RX_DR, 5 MASK_TX_DS, 4 MASK_MAX_RT, 3 EN_CRC, 2 CRCO,
-1 PWR_UP, 0 PRIM_RX. STATUS bits (write-1-clear): 6 RX_DR, 5 TX_DS,
-4 MAX_RT. FIFO_STATUS bit 0 = RX_EMPTY. RF_SETUP: bit 5 RF_DR_LOW
-(250 kbps with bit 3 RF_DR_HIGH = 0), bits 2:1 = 0b11 max power → value
-**0x26** for our link. STATUS is also clocked out on every command's first
-byte — use that instead of extra reads where convenient.
-
-Init sequence: 100 ms power-on wait → PWR_UP + EN_CRC + CRCO, 5 ms →
-EN_AA=0x00, EN_RXADDR=0x01 (pipe 0), SETUP_AW=0x03, SETUP_RETR=0x00,
-RF_CH=`channel`, RF_SETUP=0x26, RX_ADDR_P0=TX_ADDR=`addr`, RX_PW_P0=32,
-DYNPD=0, FEATURE=0 → FLUSH both, STATUS=0x70 → PRIM_RX=1, CE high.
-**Verify by reading back RF_CH and RX_ADDR_P0**; mismatch →
-`ESP_ERR_NOT_FOUND` + error log ("check 3.3 V rail B / wiring") — this is
-the wiring smoke test the bring-up app relies on.
-TX path: CE low → PRIM_RX=0 → W_TX_PAYLOAD → CE ≥10 µs pulse → wait TX_DS
-(semaphore, 5 ms timeout) → STATUS=0x70 → PRIM_RX=1 → CE high.
-SPI: mode 0, 8 MHz, `spi_bus_initialize` on `pins->host`.
+- Wrapper only translates; keep all register-level logic in the vendored
+  files. If the vendored driver needs a patch, make it, and record it in
+  the NOTICE file.
+- Packets shorter/longer than 32 bytes on air: drop at the wrapper, count
+  (`sx1262_dump_status` prints the counter).
+- Init failure (chip absent, BUSY stuck) must return an error, not hang —
+  the app retries every 5 s and shows `RADIO?` (docs/01).
 
 ## Acceptance — CI
 
-`./tools/ci_build_apps.sh` still green (component compiles once T10's app
-exists; until then it must at least compile standalone — add it to T10's
-build). Host tests untouched.
+`./tools/ci_build_apps.sh` green (component builds as part of T10's app;
+until T10 exists it must compile standalone in the container).
 
 ## Acceptance — hardware
 
-Deferred to T10's checklist (register dump + two-unit ping).
+Deferred to T10's checklist.
 
 ## Out of scope
 
-Protocol logic (validate/relay/queues — T16), auto-ACK/dynamic payloads,
-multi-pipe support, channel hopping.
+Protocol logic (validate/relay/queues — T16), FSK mode, LoRaWAN, duty-cycle
+accounting (the beacon design already guarantees it — docs/03).

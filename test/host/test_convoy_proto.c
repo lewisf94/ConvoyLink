@@ -6,7 +6,6 @@ TT_TEST(struct_sizes_are_wire_format)
 {
     TT_ASSERT_EQ(sizeof(cl_hdr_t), 4);
     TT_ASSERT_EQ(sizeof(cl_beacon_t), CL_PKT_SIZE);
-    TT_ASSERT_EQ(sizeof(cl_voice_t), CL_PKT_SIZE);
     TT_ASSERT_EQ(sizeof(cl_ping_t), CL_PKT_SIZE);
 }
 
@@ -59,24 +58,16 @@ TT_TEST(beacon_relay_rewrites_only_hop)
     TT_ASSERT_EQ(cl_validate((uint8_t *)&b, CL_PKT_SIZE), CL_TYPE_BEACON);
 }
 
-TT_TEST(voice_roundtrip_and_field_limits)
+TT_TEST(reserved_voice_type_rejected)
 {
-    cl_voice_t v;
-    cl_make_voice_hdr(&v, 1, 42, -1234, 88, CL_FRAME_SAMPLES,
-                      CL_VOICE_F_START);
-    TT_ASSERT_EQ(cl_validate((uint8_t *)&v, CL_PKT_SIZE), CL_TYPE_VOICE);
-    TT_ASSERT_EQ(v.predictor, -1234);
-    TT_ASSERT_EQ(v.step_index, 88);
-    TT_ASSERT_EQ(v.n_samples, 44);
-    TT_ASSERT_EQ(v.hdr.meta, CL_VOICE_F_START);
-
-    v.step_index = 89; /* out of IMA range */
-    TT_ASSERT_EQ(cl_validate((uint8_t *)&v, CL_PKT_SIZE), CL_ERR_FIELD);
-    v.step_index = 0;
-    v.n_samples = 0;
-    TT_ASSERT_EQ(cl_validate((uint8_t *)&v, CL_PKT_SIZE), CL_ERR_FIELD);
-    v.n_samples = CL_FRAME_SAMPLES + 1;
-    TT_ASSERT_EQ(cl_validate((uint8_t *)&v, CL_PKT_SIZE), CL_ERR_FIELD);
+    /* Type 2 carried digital voice before the v2 (SA818 analog) pivot;
+     * it is reserved and must never validate. */
+    cl_beacon_t b;
+    cl_make_beacon(&b, 0, 1, "AB", 0, 0, 0, 0, 3, 5, 0);
+    uint8_t buf[CL_PKT_SIZE];
+    memcpy(buf, &b, sizeof(b));
+    buf[1] = (CL_PROTO_VER << 4) | 0x02;
+    TT_ASSERT_EQ(cl_validate(buf, CL_PKT_SIZE), CL_ERR_TYPE);
 }
 
 TT_TEST(ping_pattern)
@@ -149,7 +140,7 @@ int main(void)
     TT_RUN(beacon_roundtrip);
     TT_RUN(beacon_fix_age_saturates);
     TT_RUN(beacon_relay_rewrites_only_hop);
-    TT_RUN(voice_roundtrip_and_field_limits);
+    TT_RUN(reserved_voice_type_rejected);
     TT_RUN(ping_pattern);
     TT_RUN(validate_rejects_junk);
     TT_RUN(beacon_range_checks);

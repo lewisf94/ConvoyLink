@@ -3,8 +3,6 @@
 
 #include <string.h>
 
-#define IMA_STEP_INDEX_MAX 88u
-
 static void fill_hdr(cl_hdr_t *h, cl_type_t type, uint8_t sender, uint8_t meta)
 {
     h->magic = CL_MAGIC;
@@ -45,16 +43,6 @@ int cl_validate(const uint8_t *buf, size_t len)
         }
         break;
     }
-    case CL_TYPE_VOICE: {
-        const cl_voice_t *v = (const cl_voice_t *)buf;
-        if (v->step_index > IMA_STEP_INDEX_MAX) {
-            return CL_ERR_FIELD;
-        }
-        if (v->n_samples == 0u || v->n_samples > CL_FRAME_SAMPLES) {
-            return CL_ERR_FIELD;
-        }
-        break;
-    }
     case CL_TYPE_PING:
         break;
     default:
@@ -86,18 +74,6 @@ void cl_beacon_to_relay(cl_beacon_t *b)
 {
     /* Same origin sender/seq/payload; only the hop marker changes. */
     b->hdr.meta = 1u;
-}
-
-void cl_make_voice_hdr(cl_voice_t *out, uint8_t sender, uint16_t seq,
-                       int16_t predictor, uint8_t step_index,
-                       uint8_t n_samples, uint8_t flags)
-{
-    memset(out, 0, sizeof(*out));
-    fill_hdr(&out->hdr, CL_TYPE_VOICE, sender, flags);
-    out->seq = seq;
-    out->predictor = predictor;
-    out->step_index = step_index;
-    out->n_samples = n_samples;
 }
 
 void cl_make_ping(cl_ping_t *out, uint8_t sender, uint16_t seq,

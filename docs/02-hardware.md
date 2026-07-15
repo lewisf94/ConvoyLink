@@ -1,7 +1,11 @@
-# 02 — Hardware: BOM, Pin Map, Wiring, Power
+# 02 — Hardware: BOM, Pin Map, Wiring, Power (v2)
 
 Target board: **classic ESP32-WROOM-32 dev board, 30-pin, USB-C** ("DevKit v1"
-pinout). All pin numbers below are GPIO numbers, not header positions.
+pinout). All pin numbers are GPIO numbers, not header positions.
+
+v2 change summary: NRF24 out; **SX1262 LoRa** (position link) takes over its
+SPI pins; **SA818S-U** (analog UHF voice) takes over the audio path — the
+ESP32 no longer touches audio samples at all.
 
 ## Bill of materials (per unit)
 
@@ -9,140 +13,147 @@ pinout). All pin numbers below are GPIO numbers, not header positions.
 |---|---|---|---|
 | 1 | ESP32 DevKit v1 30-pin USB-C | 1 | MCU |
 | 2 | GY-NEO6MV2 GPS module + patch antenna | 1 | Position |
-| 3 | NRF24L01+ PA/LNA + SMA antenna | 1 | Radio |
-| 4 | 2.8" ILI9341 SPI TFT 240×320 (XPT2046 touch) | 1 | Radar display |
-| 5 | MAX9814 mic amp module | 1 | Voice in |
-| 6 | PAM8403 audio amp board | 1 | Voice out |
-| 7 | AIYIMA 40 mm 4 Ω 3 W speaker | 1 | Voice out |
-| 8 | MP1584EN mini buck converter | 2 | 12 V→5.0 V and 12 V→3.3 V |
-| 9 | Momentary push button (PTT) | 1 (+1 optional aux) | Talk / zoom |
-| 10 | Schottky diode ≥2 A (e.g. SS34/1N5822) | 1 | Reverse-polarity |
-| 11 | Caps: 470 µF/25 V, 100 µF, 10 µF, 100 nF ×3 | — | Bulk + radio decoupling |
-| 12 | Inline fuse 2 A + 12 V accessory plug | 1 | Supply |
+| 3 | **EBYTE E22-900M22S (SX1262, +22 dBm)** on a breakout/test board with 2.54 mm headers (or Waveshare Core1262) | 1 | LoRa position link |
+| 4 | **NiceRF SA818S-U (400–480 MHz, 1 W)** on a carrier/dev board with SMA | 1 | Voice transceiver |
+| 5 | 868/915 MHz whip antenna (SMA, ~¼-wave) | 1 | LoRa |
+| 6 | UHF 430–470 MHz whip antenna (SMA) | 1 | Voice |
+| 7 | 2.8" ILI9341 SPI TFT 240×320 (XPT2046 touch unused) | 1 | Radar display |
+| 8 | MAX9814 mic amp module | 1 | Voice mic (feeds SA818) |
+| 9 | PAM8403 audio amp board | 1 | Voice out (fed by SA818) |
+| 10 | AIYIMA 40 mm 4 Ω 3 W speaker | 1 | Voice out |
+| 11 | MP1584EN mini buck converter | 2 | 12 V→5.0 V and 12 V→3.3 V |
+| 12 | Momentary push button (PTT) | 1 | Talk |
+| 13 | Schottky diode ≥2 A + inline fuse 2 A + 12 V plug | 1 | Supply |
+| 14 | Caps: 470 µF/25 V, 220 µF, 100 µF, 10 µF ×2, 100 nF ×4, 10 nF | — | Bulk + module decoupling |
+| 15 | Resistors: 47 kΩ, 10 kΩ ×2, small heatsink for SA818 | — | Audio pad, pull-ups, thermal |
 
-## Pin map (single source of truth — do not re-derive in code reviews)
+Buy modules **on carrier/adapter boards with 2.54 mm headers and SMA** —
+the bare E22-M22S and SA818 are stamp-hole SMD parts. Wire by **signal
+name** below and follow the breakout's silkscreen.
 
-Firmware must take these from `convoy_pins.h` (created in task T15); this
-table is the authority for that header.
+## Pin map (single source of truth — `convoy_pins.h` is generated from this)
 
-| GPIO | Direction | Net | Peripheral | Notes |
+| GPIO | Dir | Net | Peripheral | Notes |
 |---|---|---|---|---|
-| 18 | out | `TFT_SCK` | ILI9341 + XPT2046 (VSPI) | IOMUX pin → 40 MHz capable |
-| 23 | out | `TFT_MOSI` | ILI9341 + XPT2046 | |
-| 19 | in | `TFT_MISO` | XPT2046 (ILI9341 MISO optional) | |
+| 18 | out | `TFT_SCK` | ILI9341 (VSPI) | IOMUX pin → 40 MHz |
+| 23 | out | `TFT_MOSI` | ILI9341 | |
+| 19 | in | `TFT_MISO` | ILI9341 (optional) | |
 | 5 | out | `TFT_CS` | ILI9341 | Strapping-safe (idles high) |
-| 2 | out | `TFT_DC` | ILI9341 | Strapping pin; output-only after boot — OK. Onboard LED shares it |
+| 2 | out | `TFT_DC` | ILI9341 | Strapping pin; driven only after boot |
 | 4 | out | `TFT_RST` | ILI9341 | |
-| 32 | out | `TFT_BL` | Backlight | LEDC PWM, brightness control |
-| 33 | out | `TOUCH_CS` | XPT2046 | Stretch feature; idle high |
-| 39 (VN) | in | `TOUCH_IRQ` | XPT2046 | Input-only, **needs external 10 k pull-up** if used |
-| 14 | out | `RF_SCK` | NRF24 (HSPI via GPIO matrix) | ≤8 MHz — matrix routing fine |
-| 13 | out | `RF_MOSI` | NRF24 | |
-| 35 | in | `RF_MISO` | NRF24 | Input-only pin — ideal for MISO |
-| 15 | out | `RF_CSN` | NRF24 | Strapping (MTDO): idles high = harmless |
-| 27 | out | `RF_CE` | NRF24 | |
-| 26 | in | `RF_IRQ` | NRF24 | Active-low, internal pull-up |
+| 32 | out | `TFT_BL` | Backlight | LEDC PWM |
+| 14 | out | `LORA_SCK` | SX1262 (HSPI via matrix) | ≤10 MHz |
+| 13 | out | `LORA_MOSI` | SX1262 | |
+| 35 | in | `LORA_MISO` | SX1262 | Input-only pin — ideal |
+| 15 | out | `LORA_NSS` | SX1262 | Strapping (MTDO): idles high, harmless |
+| 27 | out | `LORA_NRST` | SX1262 | |
+| 26 | in | `LORA_DIO1` | SX1262 IRQ | RX-done/TX-done |
+| 34 | in | `LORA_BUSY` | SX1262 | Input-only pin — ideal |
+| 25 | out | `LORA_TXEN` | E22 RF switch | |
+| 33 | out | `LORA_RXEN` | E22 RF switch | |
 | 16 | in | `GPS_RX` | NEO-6M TX → ESP32 | UART2 |
-| 17 | out | `GPS_TX` | NEO-6M RX ← ESP32 | Only needed for UBX config (optional) |
-| 25 | out | `AUDIO_OUT` | DAC1 → PAM8403 L-IN | 8-bit DAC |
-| 34 | in | `MIC_IN` | MAX9814 OUT → ADC1_CH6 | Input-only |
-| 22 | in | `BTN_PTT` | PTT button → GND | Internal pull-up, active low |
-| 21 | in | `BTN_AUX` | Aux button → GND | Internal pull-up; zoom/volume |
-| 36 (VP) | in | `SENSE_12V` | 12 V via 100 k / 10 k divider | Optional; reserved |
-| 12 | — | — | **Leave unconnected** | MTDI strap: pulling high at boot bricks flash voltage |
-| 0 | — | — | Boot button | Keep free for flashing |
+| 17 | out | `GPS_TX` | NEO-6M RX ← ESP32 | UBX config only (optional) |
+| 21 | out | `VHF_TXD` | ESP32 → SA818 RXD | UART1 (remapped) 9600 |
+| 36 (VP) | in | `VHF_RXD` | SA818 TXD → ESP32 | Input-only pin — ideal |
+| 22 | out | `VHF_PTT` | SA818 PTT | **Low = transmit**; idle high |
+| 39 (VN) | in | `BTN_PTT` | PTT button → GND | Input-only: **external 10 k pull-up to 3V3 required** |
+| 0 | in | `BTN_AUX` | Devkit BOOT button (reuse) | Zoom/backlight. Don't hold while powering on (enters bootloader) |
+| 12 | — | — | **Leave unconnected** | MTDI strap — pulling high at boot bricks flash voltage |
 | 1, 3 | — | — | UART0 | USB console/flash |
+
+Not GPIO-wired: SA818 `PD` → **tie to 3.3 V** (always on); SA818 `H/L` →
+**solder jumper**: open = 1 W, to GND = 0.5 W (set per legal channel plan,
+`docs/04`). v1's `SENSE_12V` and XPT2046 touch are descoped — no pins left;
+noted as the price of the richer radio set.
 
 ### Strapping summary
 
-GPIO 0, 2, 5, 12, 15 affect boot. This map only drives them from peripherals
-that are inert at reset (chip-select lines idle high; TFT DC floats). The one
-hard rule: **nothing may pull GPIO12 high at power-on** — hence it is unused.
-If a unit boot-loops with peripherals attached and runs bare, suspect
-strapping first (see `docs/07`, §Troubleshooting).
+GPIO 0, 2, 5, 12, 15 affect boot. This map drives them only from things
+inert at reset (CS lines idle high; TFT DC floats; BOOT button unpressed).
+Hard rules: nothing on GPIO 12; don't hold AUX during power-on. A unit that
+boot-loops wired but runs bare → suspect strapping (`docs/07`).
 
-## Wiring tables
+## Wiring by module
 
-### NRF24L01+ PA/LNA (8-pin header, top view, notch left)
+### SX1262 (E22-900M22S breakout)
 
-| NRF pin | Net | Connect to |
-|---|---|---|
-| 1 GND | GND | Common ground |
-| 2 VCC | **3.3 V rail B** (dedicated buck) | **Never 5 V.** 100 µF + 10 µF + 100 nF directly across pins 1–2 |
-| 3 CE | `RF_CE` | GPIO 27 |
-| 4 CSN | `RF_CSN` | GPIO 15 |
-| 5 SCK | `RF_SCK` | GPIO 14 |
-| 6 MOSI | `RF_MOSI` | GPIO 13 |
-| 7 MISO | `RF_MISO` | GPIO 35 |
-| 8 IRQ | `RF_IRQ` | GPIO 26 |
-
-PA/LNA modules brown out on dirty supplies and then "work" erratically —
-the dedicated buck plus the capacitor stack at the module is not optional.
-
-### 2.8" ILI9341 + XPT2046
-
-| Module pin | Connect to | | Module pin | Connect to |
+| Module signal | Connect to | | Module signal | Connect to |
 |---|---|---|---|---|
-| VCC | 3V3 (devkit) | | T_CLK | GPIO 18 (shared SCK) |
-| GND | GND | | T_CS | GPIO 33 |
-| CS | GPIO 5 | | T_DIN | GPIO 23 (shared MOSI) |
-| RESET | GPIO 4 | | T_DO | GPIO 19 (shared MISO) |
-| DC | GPIO 2 | | T_IRQ | GPIO 39 + 10 k→3V3 |
-| SDI/MOSI | GPIO 23 | | SDO/MISO | GPIO 19 (optional) |
-| SCK | GPIO 18 | | LED | GPIO 32 via 47 Ω (or 3V3 for always-on) |
+| VCC | **3.3 V rail B** | | NSS | GPIO 15 |
+| GND | GND | | SCK | GPIO 14 |
+| DIO1 | GPIO 26 | | MOSI | GPIO 13 |
+| BUSY | GPIO 34 | | MISO | GPIO 35 |
+| NRST | GPIO 27 | | TXEN | GPIO 25 |
+| ANT | 868/915 whip (SMA) | | RXEN | GPIO 33 |
+
+100 µF + 100 nF directly across VCC/GND at the module. **3.3 V only — 5 V
+kills it.** TX draws ~120 mA peaks at +22 dBm.
+
+### SA818S-U (carrier board)
+
+| Signal | Connect to |
+|---|---|
+| VCC | **5 V rail A**, via 220 µF + 100 nF + 10 nF at the module |
+| GND | GND (star point at buck A) |
+| RXD / TXD | GPIO 21 / GPIO 36 |
+| PTT | GPIO 22 (low = TX) |
+| PD | 3.3 V (tied) |
+| H/L | solder jumper (open = 1 W / GND = 0.5 W) |
+| MIC_IN | MAX9814 `OUT` → **10 µF (+ toward MAX9814) → 47 kΩ → MIC_IN** |
+| AF_OUT | **10 µF → PAM8403 L-IN** (add 10 k pot before it if volume trim wanted) |
+| ANT | UHF whip (SMA) — **never key TX without the antenna fitted** |
+
+Notes (from field-proven builds): the module runs warm on TX — stick a
+small heatsink on the ground pad near the antenna end; budget **1 A** on
+the 5 V rail during TX; poor supply decoupling shows up as hum/noise on
+your transmitted audio; MAX9814 GAIN → GND (50 dB) to start and let the
+SA818's limiter + the 47 k pad do the rest (if others report distortion,
+move GAIN to 40 dB). PAM8403 outputs are bridged — never ground a speaker
+wire.
 
 ### GY-NEO6MV2 GPS
 
-| GPS pin | Connect to |
-|---|---|
-| VCC | 5 V rail (module has its own LDO; I/O is 3.3 V — safe) |
-| GND | GND |
-| TX | GPIO 16 |
-| RX | GPIO 17 |
+VCC → 5 V rail A · GND → GND · TX → GPIO 16 · RX → GPIO 17.
+Patch antenna sky-up on the dash.
 
-Antenna must face the sky — mount the patch antenna on the dash top.
+### ILI9341 display
 
-### Audio
-
-```
-MAX9814: VDD→3V3, GND→GND, OUT→GPIO34, GAIN→GND (50 dB) to start, A/R→float
-PAM8403: 5V→5 V rail, GND→GND, L-IN→GPIO25 via 10 µF series cap, R-IN→GND via 10 µF (unused)
-         L+ / L− → speaker (Class-D bridge output: NEVER ground either speaker wire)
-```
-
-If playback hisses, add an RC low-pass between DAC and amp (1 kΩ series +
-10 nF to GND, fc ≈ 16 kHz). Start without it.
+VCC → devkit 3V3 · GND → GND · CS 5 · RESET 4 · DC 2 · MOSI 23 · SCK 18 ·
+MISO 19 (optional) · LED → GPIO 32 via 47 Ω. Touch pins unconnected (v2).
 
 ### Buttons
 
-PTT and AUX: one leg to GPIO (22 / 21), other leg to GND. Internal pull-ups.
-Mount PTT somewhere reachable without looking — steering-column stalk area.
+PTT: GPIO 39 → button → GND, plus **10 kΩ from GPIO 39 to 3.3 V** (input-
+only pins have no internal pull-up). AUX: the devkit BOOT button is already
+wired to GPIO 0 — extend a parallel button to the case if you want it
+reachable.
 
 ## Power tree
 
 ```
-12 V accessory socket ── 2 A fuse ── Schottky ──┬── 470 µF + 100 nF
-                                                ├── Buck A → 5.0 V ──┬─ ESP32 VIN
-                                                │                    ├─ PAM8403
-                                                │                    └─ GPS VCC
-                                                └── Buck B → 3.3 V ──── NRF24 only
-ESP32 devkit 3V3 out ──┬─ TFT VCC/backlight
-                       └─ MAX9814
+12 V acc ── 2 A fuse ── Schottky ──┬── 470 µF + 100 nF
+                                   ├── Buck A → 5.0 V ──┬─ ESP32 VIN
+                                   │                    ├─ SA818 (220 µF local)
+                                   │                    ├─ PAM8403
+                                   │                    └─ GPS VCC
+                                   └── Buck B → 3.3 V ──── SX1262 only (100 µF local)
+ESP32 devkit 3V3 ──┬─ TFT + backlight
+                   └─ MAX9814
 ```
 
-- **Set both bucks with a multimeter before connecting anything** (pot turns
-  many times; mark set position). Buck A: 5.0 V. Buck B: 3.3 V.
-- Auto-start comes free: the accessory socket is switched by ignition.
-  `SENSE_12V` (GPIO 36) is reserved for a future "graceful shutdown" feature —
-  wire the divider if convenient, otherwise skip.
-- USB-C stays free for flashing/logs; do not power from USB and 12 V decide-
-  simultaneously unless the devkit has the usual VIN diode (most do — check).
+Set both bucks with a multimeter **before** connecting loads. Rail A must
+hold 5.0 V while the SA818 transmits (scope/multimeter during a long PTT —
+sag below ~4.5 V = raise wire gauge / check the buck). Auto-start comes
+free from the switched accessory socket.
 
-## Antenna placement (this is where range is won)
+## Antennas (this is where range is won)
 
-- NRF24 antenna **vertical**, as high as possible, at a side window or on the
-  dash near the windscreen. Metal roof + engine block shadow the rear — an
-  SMA pigtail to a window mount is the single biggest range upgrade.
-- Keep the NRF24 antenna ≥ 20 cm from the GPS patch antenna.
-- All five cars should mount roughly the same way, or range will be
-  asymmetric ("A hears B, B doesn't hear A").
+- Three antennas per unit: GPS patch (sky view), 868/915 LoRa whip, UHF
+  voice whip. Both whips **vertical**, high in the cabin (windscreen top
+  corners / side windows), ideally ≥ 30 cm apart and ≥ 20 cm from the GPS
+  patch.
+- An SMA extension to a window/roof mount is the single biggest range
+  upgrade for both radios; glass-mount or mag-mount UHF antennas are cheap.
+- Mount all five cars roughly the same way or range will be asymmetric.
+- **Never transmit on the SA818 without its antenna** — reflected power
+  damages the PA.
