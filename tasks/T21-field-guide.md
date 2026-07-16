@@ -24,9 +24,10 @@ tunables informed by real five-unit data.
     (last-known position + age is exactly what the radar preserves)
   - Troubleshooting quick table (symptom → docs/07 reference)
   - Legal note: restate the docs/03 LoRa regulatory table and the docs/04
-    voice channel-plan table (PMR446/ham/GMRS/UHF-CB) — owner verifies
-    local regulations and confirms every unit's region/channel/power
-    jumper matches; range expectations restated honestly (docs/00)
+    voice legality table (ESP-NOW ≤100 mW EIRP; SX1262 Codec2 5 mW ERP;
+    SA818 licensed-variant caveat) — owner verifies local regulations and
+    confirms every unit shares region + voice transport; range expectations
+    restated honestly (docs/00)
 - Tuning pass (only with owner-supplied five-unit field data): revisit
   `convoy_cfg.h` values — beacon jitter, relay window, busy hangover,
   staleness thresholds, zoom hysteresis — change only what field notes

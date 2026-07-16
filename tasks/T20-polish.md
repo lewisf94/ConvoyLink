@@ -23,11 +23,10 @@ the M4/M5 field notes flagged.
   10 s window; any WDT reset visible in logs with reset-reason banner on
   next boot (owner debugging aid)
 - Defensive sweeps (audit + fix): every queue-full path counts + drops
-  oldest; `cl_validate` failures counted per source; SX1262 re-init retry
-  (5 s backoff) if init failed at boot — red `RADIO?` status-bar tile
-  meanwhile; SA818 unresponsive → `VOICE?` tile + config re-apply retries
-  (T18 started this; make it bulletproof); GPS silent > 10 s → sats
-  display goes red
+  oldest; frame-validation failures counted per source; SX1262 re-init
+  retry (5 s backoff) if init failed at boot — red `RADIO?` status-bar tile
+  meanwhile; audio_io/transport init fault → `VOICE?` tile + retry (T19
+  started this; make it bulletproof); GPS silent > 10 s → sats display red
 - Any open UI fixes from field notes (dot jitter smoothing: if noted,
   apply a 2-sample position average behind a cfg flag)
 - Update `README.md` status table to v1.0-rc state
@@ -44,8 +43,8 @@ All jobs green; any renderer change comes with host-test coverage
       deliberate WDT trip (add a hidden `crash` console cmd, remove-me
       comment) 
 - [ ] Disconnect the SX1262 mid-run: `RADIO?` tile appears, unit keeps
-      rendering, reconnect + `retry` recovers without reboot; same drill
-      for the SA818 → `VOICE?`
+      rendering, reconnect + `retry` recovers without reboot; unplug the
+      I²S mic/amp → `VOICE?`, radar unaffected
 - [ ] Night level survives power cycle
 - [ ] 2-hour bench soak with a second unit beaconing + periodic PTT:
       zero resets, `radiostat` drop counters ≈ 0, heap stable

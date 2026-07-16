@@ -30,8 +30,9 @@
 
 typedef enum {
     CL_TYPE_BEACON = 1,
-    /* 2 is reserved: was digital voice before the v2 architecture moved
-     * voice to the analog SA818 link (docs/00 decision log). Never reuse. */
+    /* 2 is permanently reserved on this LoRa beacon link (it was v1 digital
+     * voice). v3 voice is digital again but rides its own transport with its
+     * own frame format (voice_proto.h, magic 0xC8) — never on this link. */
     CL_TYPE_PING = 3,
 } cl_type_t;
 

@@ -31,16 +31,16 @@ With `idf.py monitor` attached to the `convoylink` app (console implemented
 in T15):
 
 ```
-convoy> unitcfg set 2 JD        # unit_id 2, initials "JD"
-convoy> unitcfg region EU       # EU | US | AU — selects the LoRa frequency (docs/03)
-convoy> unitcfg voice PMR446 3  # channel plan + channel number (docs/04 table)
+convoy> unitcfg set 2 JD          # unit_id 2, initials "JD"
+convoy> unitcfg region EU         # EU | US | AU — selects the LoRa frequency (docs/03)
+convoy> unitcfg voice espnow      # espnow (default) | sx1262 — voice transport (docs/04)
 convoy> unitcfg show
-unit_id=2 initials=JD region=EU voice=PMR446 ch3 (446.05625 MHz, CTCSS 88.5)
+unit_id=2 initials=JD region=EU voice=espnow
 ```
 
 Valid ids: 0–4, unique per convoy. Initials: exactly 2 ASCII chars A–Z/0–9.
-All five units must share the same region and voice channel. Remember the
-SA818 H/L power jumper must match the plan (docs/02, docs/04).
+All five units must share the same region **and** the same voice transport
+(mixing espnow and sx1262 units means they can't hear each other).
 Un-provisioned units boot as `U? --`, transmit nothing, and show a
 `PROVISION ME` banner.
 
@@ -50,8 +50,8 @@ Un-provisioned units boot as `U? --`, transmit nothing, and show a
 make -C test/host          # builds + runs every test binary; non-zero exit on failure
 ```
 
-Pure-C components (`convoy_proto`, `convoy_geo`, `nmea`,
-`neighbor_table`, `radar_render`) get their tests here. Adding a component
+Pure-C components (`convoy_proto`, `convoy_geo`, `adpcm`, `voice_pipe`,
+`nmea`, `neighbor_table`, `radar_render`) get their tests here. Adding a component
 test: drop `test_<name>.c` into `test/host/` — the Makefile picks up
 `test_*.c` automatically and links sources listed in its `SRCS_<name>`
 variable (see the convoy_proto example already present).
@@ -83,14 +83,14 @@ A task is not done until CI is green (`tasks/README.md`).
 | Symptom | Likely cause / fix |
 |---|---|
 | Boot loop with peripherals attached, fine bare | Strapping pin pulled — check nothing is bridged onto GPIO 0/3/45/46 and BOOT isn't held (S3 strapping, `docs/02`) |
-| `flash read err` / brownout resets | Buck A undervolt or USB+12 V fight; measure 5 V under load (SA818 TX pulls ~1 A) |
-| SX1262 init fails / BUSY stuck high | 3.3 V rail B missing/dirty, NRST not on GPIO 27, or TXEN/RXEN swapped — run `bringup_radio` |
+| `flash read err` / brownout resets | Buck A undervolt or USB+12 V fight; measure 5 V under load (amp peaks briefly) |
+| SX1262 init fails / BUSY stuck high | 3.3 V rail B missing/dirty, NRST not on GPIO 15, or TXEN/RXEN swapped — run `bringup_radio` |
 | LoRa "works on the bench, deaf in the car" | Antenna flat instead of vertical, or supply noise — caps at the module, window mount |
-| SA818 ignores AT commands | TX/RX crossed (ESP32 TX→module RXD), PD not tied high, or 9600 baud mismatch — run `bringup_voice` |
-| Your voice transmits with hum | SA818 supply decoupling missing (220 µF at module), or mic leads running beside the power wiring |
-| Nobody hears you / you hear nobody | Channel/CTCSS mismatch between units (`unitcfg show` on both), H/L jumper, or squelch too high |
+| Mic silent / all zeros | INMP441 L/R not tied to GND, SD not on GPIO 42, or WS/BCLK swapped — run `bringup_audio` mic meter |
+| No sound from speaker | MAX98357A SD pin held low (muted), DIN not on GPIO 47, or speaker wire grounded (it's bridged) |
+| Nobody hears you / you hear nobody | Units on different `voice` transports or channels (`unitcfg show` on both), or ESP-NOW channel mismatch |
 | No GPS fix | Needs sky. Cold start can take minutes; check `bringup_gps` shows sentences (module OK) vs silence (wiring) |
-| Display stays white | RESET/DC swapped, or CS not on GPIO 5; run `bringup_display` |
+| Display stays white | RESET/DC swapped, or CS not on GPIO 10; run `bringup_display` |
 | `idf.py` not found | Shell missing `. ~/esp-idf/export.sh` |
 
 ## Serial console conventions

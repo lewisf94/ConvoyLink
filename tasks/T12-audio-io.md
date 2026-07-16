@@ -1,71 +1,66 @@
-# T12 — `sa818` component: voice module control
+# T12 — `audio_io`: I²S mic capture + speaker playback
 
-*(v2: replaces the original `audio_io` ADC/DAC component — voice moved to
-the analog SA818 module, `docs/00` decision log. Filename kept for queue
+*(v3: retargeted from the SA818 UART driver to the S3 I²S audio path —
+`docs/00` decision log. Voice is digital again; filename kept for queue
 stability.)*
 
-**Depends:** none · **Phase:** M3
-**Required reading:** `docs/04-voice-sa818.md` (all); `docs/02` §SA818 wiring
+**Depends:** none · **Phase:** M3 (ESP-IDF)
+**Required reading:** `docs/04-voice.md` §Capture/playback; `docs/02`
+§INMP441 + §MAX98357A wiring
 
 ## Goal
 
-UART command/response driver for the SA818S-U: channel configuration,
-PTT control, RSSI polling. This is the entire "voice" firmware surface —
-no audio samples are ever handled in code.
+Own the S3's I²S audio: INMP441 mic in and MAX98357A amp out, presenting
+clean 8 kHz mono int16 PCM both ways. One I²S peripheral in full-duplex
+(shared BCLK/WS), half-duplex use (PTT).
 
 ## Deliverables
 
-- `firmware/components/sa818/include/sa818.h`
-- `firmware/components/sa818/sa818.c`
-- `firmware/components/sa818/CMakeLists.txt` (REQUIRES driver, convoy_pins)
+- `firmware/components/audio_io/include/audio_io.h`
+- `firmware/components/audio_io/audio_io.c`
+- `firmware/components/audio_io/CMakeLists.txt` (REQUIRES `esp_driver_i2s`, convoy_pins)
 
 ## Interface contract
 
 ```c
 #include "esp_err.h"
-#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
-typedef struct {
-    uint8_t bw;            /* 0 = 12.5 kHz (all v1 channel plans use this) */
-    uint32_t freq_hz_x10;  /* e.g. 4460562 for 446.05625 MHz, fits exactly */
-    uint8_t ctcss_code;    /* 0 = none, else per SA818 CTCSS table */
-    uint8_t squelch;       /* 0..8 */
-} sa818_channel_t;
+typedef enum { AIO_OFF, AIO_CAPTURE, AIO_PLAYBACK } aio_mode_t;
 
-/* UART1 init on CONVOY_PIN_VHF_* @ 9600 8N1, PTT GPIO to RX (idle high),
- * AT+DMOCONNECT handshake (retry x3, 500 ms apart). */
-esp_err_t sa818_init(void);
+esp_err_t aio_init(void);        /* one I²S full-duplex channel on CONVOY_PIN_I2S_*,
+                                    8 kHz mono; allocates all DMA buffers once  */
+esp_err_t aio_set_mode(aio_mode_t m);   /* enable RX, TX, or neither            */
+aio_mode_t aio_mode(void);
 
-/* AT+DMOSETGROUP with tx==rx (simplex). Re-sent automatically by
- * sa818_init's caller after any esp_err_t failure from this function. */
-esp_err_t sa818_set_channel(const sa818_channel_t *ch);
+/* CAPTURE: blocking read of up to max int16 samples @ 8 kHz. INMP441 is
+ * 24-bit in a 32-bit slot (left) — take the top 16 bits. Returns count,
+ * 0 on timeout, -1 if not in CAPTURE. */
+int aio_read(int16_t *pcm, size_t max, uint32_t wait_ms);
 
-esp_err_t sa818_set_volume(uint8_t vol_1_to_8);
-
-/* Drives the PTT GPIO directly (docs/02: low = TX). No UART round trip -
- * this must be fast and glitch-free. */
-void sa818_ptt(bool transmit);
-
-/* AT+RSSI? parsed to a 0-255-ish module-reported value; carrier_present
- * applies CL_VOICE_SQUELCH_DEFAULT-consistent thresholding (docs/04). */
-esp_err_t sa818_rssi(uint8_t *raw_out, bool *carrier_present);
+/* PLAYBACK: blocking write of 8 kHz int16 mono to the MAX98357A (16-bit).
+ * Volume-scaled by aio_set_volume. Returns samples accepted. */
+int aio_write(const int16_t *pcm, size_t n, uint32_t wait_ms);
+void aio_set_volume(uint8_t pct);       /* 0..100 */
 ```
 
-Implementation notes: all AT commands end `\r\n`, expect a `+DMO…:0`
-reply within 500 ms (timeout → `ESP_ERR_TIMEOUT`, caller retries per
-docs/04); no dynamic allocation; `sa818_ptt` never touches UART, only the
-GPIO, so it can't be delayed by a pending command.
+Implementation notes (binding, from `docs/04`): new `driver/i2s_std.h` API
+(not the legacy `i2s.h`); one `i2s_chan` pair (TX+RX) sharing BCLK/WS on
+`CONVOY_PIN_I2S_BCLK`/`_WS`, `I2S_DIN` = RX data, `I2S_DOUT` = TX data;
+sample rate `CL_AUDIO_RATE_HZ`; DMA frame a small multiple of
+`CL_VOICE_FRAME_SAMPLES`. Mono: mic in left slot, amp left-channel. No
+allocation after `aio_init`. `aio_read` conditions to int16 (top bits +
+optional fixed gain, soft-clip). Idle (`AIO_OFF`): stop TX so the amp mutes.
 
 ## Acceptance — CI
 
-`./tools/ci_build_apps.sh` green (compiles standalone; add to T13's app).
+`./tools/ci_build_apps.sh` green (compiles standalone; exercised by T13).
 
 ## Acceptance — hardware
 
-Deferred to T13's checklist (channel set, PTT key, RSSI read).
+Via T13's checklist (tone, mic meter, loopback).
 
 ## Out of scope
 
-PTT state machine / UI wiring (T18), carrier-detect polling loop (T18's
-`voice_task`), any audio signal path (there isn't one in firmware).
+Codec (T02), framing/jitter (T18), transport (T19), PTT logic (T19).

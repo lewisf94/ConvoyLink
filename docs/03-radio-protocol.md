@@ -1,8 +1,9 @@
-# 03 — LoRa Data Link & ConvoyLink Protocol (CLP) — v2
+# 03 — LoRa Data Link & ConvoyLink Protocol (CLP) — v3
 
-The **SX1262 LoRa radio carries all data** (position beacons + range-test
-pings). Voice is a separate analog link (`docs/04-voice-sa818.md`) and never
-appears on this radio. This doc is the wire-format contract:
+The **SX1262 LoRa radio carries position data** (beacons + range-test
+pings) and, with the optional SX1262 voice transport, Codec2 voice frames
+too (`docs/04-voice.md`). The default ESP-NOW voice transport does **not**
+touch this radio. This doc is the wire-format contract for the beacon link:
 `components/convoy_proto` implements exactly these structures and the host
 tests assert the sizes. **Changing anything here requires updating
 convoy_proto, its tests, and this doc in the same commit.**
@@ -54,7 +55,8 @@ typedef struct __attribute__((packed)) {
     uint8_t meta;      // beacon: hop count; ping: unused
 } cl_hdr_t;
 
-enum cl_type { CL_TYPE_BEACON = 1, /* 2 reserved (was digital voice) */
+enum cl_type { CL_TYPE_BEACON = 1, /* 2 permanently reserved; v3 voice uses
+                                      voice_proto (0xC8), not this link */
                CL_TYPE_PING = 3 };
 ```
 
@@ -106,8 +108,14 @@ range app logs both (a real improvement over v1's NRF24 1-bit RPD).
 2. **Listen-before-talk, cheap version**: don't start a TX while a
    reception is in progress (DIO1 preamble/header detect or modem-busy);
    defer up to 200 ms in 20 ms steps, then send anyway.
-3. Beacons and relays are the only traffic; there is no priority problem.
-   (Voice lives on the SA818 and shares nothing with this radio.)
+3. With the **default ESP-NOW voice transport**, beacons and relays are the
+   only LoRa traffic — no priority problem, and voice (on the 2.4 GHz radio)
+   shares nothing with this chip.
+4. With the **optional SX1262/Codec2 voice transport** (`docs/04`),
+   `radio_task` also owns the voice frames: it switches the chip LoRa↔GFSK,
+   and a voice burst (short, tiny Codec2 frames) takes priority — beacons
+   defer until the burst ends, then resume. This is the shared-radio
+   arbitration that makes that transport a follow-on, not the default.
 
 ## Beacon relay (single hop — the range multiplier)
 
@@ -150,4 +158,5 @@ integration work.
 | `US` | 915.0 MHz | 902–928 MHz ISM digital modulation — licence-free |
 | `AU`/`NZ` | 915.0 MHz | 915–928 MHz LIPD class licence |
 
-Voice-side legality is a separate matter — see `docs/04-voice-sa818.md`.
+Voice-side legality (ESP-NOW ≤100 mW EIRP; SX1262 Codec2 at 869.7–870 MHz,
+5 mW ERP) is covered in `docs/04-voice.md`.

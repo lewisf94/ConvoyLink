@@ -1,14 +1,16 @@
-# 02 — Hardware: BOM, Pin Map, Wiring, Power (v2.1)
+# 02 — Hardware: BOM, Pin Map, Wiring, Power (v3)
 
 Target board: **ESP32-S3-DevKitC-1 (N16R8)** — the 44-pin Espressif
 reference board (ESP32-S3-WROOM-1, 16 MB flash, 8 MB octal PSRAM, dual
 USB-C). All pin numbers below are GPIO numbers.
 
-v2.1 change summary: MCU is the **ESP32-S3** (classic WROOM-32 retired —
-voice went analog so the on-chip DAC that pinned us to the classic part is
-no longer needed). Radios unchanged from v2: **SX1262 LoRa** for positions,
-**SA818S-U** analog UHF for voice. If you use a different S3 board, only
-this pin table changes.
+v3 change summary: voice is now **digital** (`docs/04`) — the SA818 UHF
+module and the whole analog audio chain (MAX9814/PAM8403) are gone,
+replaced by an **INMP441 I²S mic** and **MAX98357A I²S amp**. Positions
+still ride the **SX1262 LoRa** radio, which now *also* carries the optional
+Codec2 voice transport; the default voice transport is **ESP-NOW** on the
+S3's own 2.4 GHz radio (no extra parts). If you use a different S3 board,
+only this pin table changes.
 
 ## Bill of materials (per unit)
 
@@ -17,23 +19,25 @@ this pin table changes.
 | 1 | ESP32-S3-DevKitC-1 (N16R8) | 1 | MCU |
 | 2 | GY-NEO6MV2 GPS module + patch antenna | 1 | Position |
 | 3 | **EBYTE E22-900M22S (SX1262, +22 dBm)** on a 2.54 mm breakout | 1 | LoRa position link |
-| 4 | **NiceRF SA818S-U (400–480 MHz, 1 W)** on a carrier/dev board with SMA | 1 | Voice transceiver |
-| 5 | 868/915 MHz whip antenna (SMA, ~¼-wave) | 1 | LoRa |
-| 6 | UHF 430–470 MHz whip antenna (SMA) | 1 | Voice |
+| 4 | **INMP441 I²S MEMS microphone** | 1 | Voice in (digital) |
+| 5 | **MAX98357A I²S class-D amp** | 1 | Voice out (drives 4 Ω speaker) |
+| 6 | 868/915 MHz whip antenna (SMA, ~¼-wave) | 1 | LoRa (positions + Codec2 voice) |
 | 7 | 2.8" ILI9341 SPI TFT 240×320 (XPT2046 touch unused) | 1 | Radar display |
-| 8 | MAX9814 mic amp module | 1 | Voice mic (feeds SA818) |
-| 9 | PAM8403 audio amp board | 1 | Voice out (fed by SA818) |
-| 10 | AIYIMA 40 mm 4 Ω 3 W speaker | 1 | Voice out |
-| 11 | MP1584EN mini buck converter | 2 | 12 V→5.0 V and 12 V→3.3 V |
-| 12 | Momentary push button (PTT) | 1 | Talk |
-| 13 | Schottky diode ≥2 A + inline fuse 2 A + 12 V plug | 1 | Supply |
-| 14 | Caps: 470 µF/25 V, 220 µF, 100 µF, 10 µF ×2, 100 nF ×4, 10 nF | — | Bulk + module decoupling |
-| 15 | Resistors: 47 kΩ, 10 kΩ, small heatsink for SA818 | — | Audio pad, thermal |
+| 8 | AIYIMA 40 mm 4 Ω 3 W speaker | 1 | Voice out |
+| 9 | MP1584EN mini buck converter | 2 | 12 V→5.0 V and 12 V→3.3 V |
+| 10 | Momentary push button (PTT) + aux button | 2 | Talk / zoom |
+| 11 | Schottky diode ≥2 A + inline fuse 2 A + 12 V plug | 1 | Supply |
+| 12 | Caps: 470 µF/25 V, 100 µF, 10 µF, 100 nF ×4 | — | Bulk + module decoupling |
 
-Buy the SX1262 and SA818 **on carrier boards with 2.54 mm headers and SMA**;
-wire by signal name and follow each breakout's silkscreen. The mic and
-speaker wire to the **SA818**, never to the ESP32 — the S3 has no DAC and
-firmware never touches audio.
+Voice needs **no UHF radio and no analog audio parts** — the INMP441 and
+MAX98357A are I²S digital, and the transport is either the S3's own 2.4 GHz
+radio (ESP-NOW) or the SX1262 already on the board (Codec2). The SA818 +
+UHF whip appear only in the licensed-variant appendix (`docs/04`).
+
+Buy the SX1262 **on a carrier board with 2.54 mm headers and SMA**; wire by
+signal name and follow each breakout's silkscreen. The INMP441 mic and
+MAX98357A amp are I²S digital modules that wire straight to the S3 — no DAC,
+no analog audio path, no mic pre-amp.
 
 ## Pin map (single source of truth — `convoy_pins.h` is generated from this)
 
@@ -61,9 +65,10 @@ bidirectional pin with an internal pull-up available (the classic ESP32's
 | 8 | `LORA_RXEN` | E22 RF switch | |
 | 38 | `GPS_RX` | NEO-6M TX → ESP32 | UART1 |
 | 39 | `GPS_TX` | NEO-6M RX ← ESP32 | UBX config only (optional) |
-| 40 | `VHF_TXD` | ESP32 → SA818 RXD | UART2, 9600 |
-| 41 | `VHF_RXD` | SA818 TXD → ESP32 | UART2 |
-| 42 | `VHF_PTT` | SA818 PTT | **Low = transmit**; idle high |
+| 40 | `I2S_BCLK` | INMP441 SCK + MAX98357A BCLK | shared bit clock |
+| 41 | `I2S_WS` | INMP441 WS + MAX98357A LRC | shared word select |
+| 42 | `I2S_DIN` | INMP441 SD → ESP32 | mic data in |
+| 47 | `I2S_DOUT` | ESP32 → MAX98357A DIN | speaker data out |
 | 1 | `BTN_PTT` | PTT button → GND | Internal pull-up, active low |
 | 2 | `BTN_AUX` | Aux button → GND | Internal pull-up; zoom/backlight |
 | 48 | `STATUS_LED` | Onboard WS2812 RGB | Optional boot/fault indicator |
@@ -107,24 +112,33 @@ first (`docs/07`).
 100 µF + 100 nF directly across VCC/GND at the module. **3.3 V only — 5 V
 kills it.** TX draws ~120 mA peaks at +22 dBm.
 
-### SA818S-U (carrier board)
+### INMP441 I²S microphone
 
-| Signal | Connect to |
+| Module pin | Connect to |
 |---|---|
-| VCC | **5 V rail A**, via 220 µF + 100 nF + 10 nF at the module |
-| GND | GND (star point at buck A) |
-| RXD / TXD | GPIO 40 / GPIO 41 |
-| PTT | GPIO 42 (low = TX) |
-| PD | 3.3 V (tied) |
-| H/L | solder jumper — **default GND = 0.5 W** for the PMR446 plan (docs/04) |
-| MIC_IN | MAX9814 `OUT` → **10 µF (+ toward MAX9814) → 47 kΩ → MIC_IN** |
-| AF_OUT | **10 µF → PAM8403 L-IN** (optional 10 k trim pot before it) |
-| ANT | UHF whip (SMA) — **never key TX without the antenna fitted** |
+| VDD | 3V3 | GND | GND |
+| SCK | GPIO 40 (`I2S_BCLK`) |
+| WS | GPIO 41 (`I2S_WS`) |
+| SD | GPIO 42 (`I2S_DIN`) |
+| L/R | **GND** (left channel — mic occupies the left slot) |
 
-Field-proven notes: heatsink the ground pad near the antenna end (runs warm
-on TX); budget **1 A** on the 5 V rail during TX; weak VCC decoupling shows
-up as hum on your transmitted audio; MAX9814 GAIN → GND (50 dB) to start.
-PAM8403 outputs are bridged — never ground a speaker wire.
+### MAX98357A I²S amplifier
+
+| Module pin | Connect to |
+|---|---|
+| Vin | 5 V rail A (2.5–5.5 V ok) | GND | GND |
+| BCLK | GPIO 40 (`I2S_BCLK`, shared) |
+| LRC | GPIO 41 (`I2S_WS`, shared) |
+| DIN | GPIO 47 (`I2S_DOUT`) |
+| GAIN | leave floating = 9 dB (or tie per board table) |
+| SD | leave high/floating = enabled, left-channel decode |
+| ± out | 4 Ω speaker (bridged — **never ground a speaker wire**) |
+
+Both I²S modules share `I2S_BCLK` + `I2S_WS`; the S3 runs one I²S peripheral
+in full-duplex (`docs/04`). Put 100 nF across each module's supply. No
+heatsink, no pre-amp, no AGC — digital in, class-D out. Idle current is
+negligible; the amp draws up to ~1 W of audio into the 4 Ω speaker, budget
+it on rail A.
 
 ### GY-NEO6MV2 GPS
 
@@ -147,27 +161,27 @@ restriction on the S3.
 ```
 12 V acc ── 2 A fuse ── Schottky ──┬── 470 µF + 100 nF
                                    ├── Buck A → 5.0 V ──┬─ S3 devkit "5V" pin
-                                   │                    ├─ SA818 (220 µF local)
-                                   │                    ├─ PAM8403
+                                   │                    ├─ MAX98357A amp
                                    │                    └─ GPS VCC
                                    └── Buck B → 3.3 V ──── SX1262 only (100 µF local)
 S3 devkit 3V3 out ──┬─ TFT + backlight
-                    └─ MAX9814
+                    └─ INMP441 mic
 ```
 
 Set both bucks with a multimeter **before** connecting loads (Buck A 5.0 V,
-Buck B 3.3 V). Rail A must hold 5.0 V while the SA818 transmits — check it
-under a long PTT; sag below ~4.5 V means thicker wire or a better buck.
-Auto-start comes free from the switched accessory socket. Feed Buck A's
-5 V into the board's **5V** pin; the onboard LDO makes the 3V3 rail.
+Buck B 3.3 V). Rail A dips briefly when the amp hits loud audio peaks —
+100 µF near the MAX98357A covers it. Auto-start comes free from the switched
+accessory socket. Feed Buck A's 5 V into the board's **5V** pin; the onboard
+LDO makes the 3V3 rail. (No UHF transmitter means no 1 A TX surge to plan
+for — the v3 supply is easier than v2's.)
 
 ## Antennas (this is where range is won)
 
-- Three antennas per unit: GPS patch (sky view), 868/915 LoRa whip, UHF
-  voice whip. Both whips **vertical**, high in the cabin, ≥ 30 cm apart and
-  ≥ 20 cm from the GPS patch.
+- Two antennas per unit: GPS patch (sky view) and the **868/915 LoRa whip**
+  (positions, and the Codec2 voice transport). The S3's own PCB/IPEX antenna
+  handles ESP-NOW voice — no third antenna.
+- LoRa whip **vertical**, high in the cabin, ≥ 20 cm from the GPS patch.
 - An SMA extension to a window/roof mount is the single biggest range
-  upgrade for both radios; glass-mount or mag-mount UHF antennas are cheap.
+  upgrade for the LoRa link.
 - Mount all five cars roughly the same way or range will be asymmetric.
-- **Never transmit on the SA818 without its antenna** — reflected power
-  damages the PA.
+- (Licensed SA818 variant only: add a UHF whip and never key TX without it.)

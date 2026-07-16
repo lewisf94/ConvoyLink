@@ -24,15 +24,15 @@ the ignition. Up to 5 cars.
  └──────────────────────┘
 ```
 
-## How it works (v2 two-radio architecture)
+## How it works (v3 architecture)
 
 | Subsystem | Choice |
 |---|---|
 | MCU | ESP32-S3-DevKitC-1 (N16R8) — ESP-IDF v5.3, no Arduino |
 | Position link | **LoRa** (Semtech SX1262, EBYTE E22-900M22S) @ 869/915 MHz — 32-byte beacons every 5 s, **single-hop relay through middle cars**. Same radio class Meshtastic proves at 1–5 miles car-to-car |
-| Voice | **Analog UHF FM** (NiceRF SA818S-U) — a complete walkie-talkie module; the ESP32 keys PTT and sets channel/CTCSS over UART, so firmware contains **zero audio code**. Channel plan is region config (PMR446 / ham / GMRS / UHF-CB — docs/04) |
+| Voice | **Digital PTT**, transport-abstracted (`docs/04`): I²S mic → codec → jitter buffer → I²S amp, over a **swappable radio** — **ESP-NOW** by default (licence-free, on the S3's own 2.4 GHz radio, ~150–400 m), with **SX1262/Codec2** at 5 mW as a licence-free range upgrade (~0.5–1.5 km). Talker's initials show on every radar |
 | Display | 2.8" ILI9341 SPI, 5 Hz strip-rendered radar with range rings, compass, staleness tiers (live → stale → ghost — dots age, they don't vanish) |
-| Range honesty | Radar **2–5 km** typical (more relayed / line-of-sight), voice **1–5 km** — terrain and antenna placement dominate (docs/00 §Range expectations, docs/02 §Antennas) |
+| Range honesty | Radar **2–5 km** typical (more relayed / line-of-sight) is the km-scale awareness layer; **voice is licence-free but shorter-range** (see above) — the SA818 analog variant reaches 1–5 km but needs ham licences (docs/04 appendix) |
 
 ## Repository tour
 
@@ -47,13 +47,15 @@ the ignition. Up to 5 cars.
 
 ## Status
 
-Scaffold complete on the **v2 two-radio architecture** (LoRa positions +
-analog UHF voice — see the decision log in `docs/00-brief.md` for why NRF24
-was retired): docs, task queue, CI, and the `convoy_proto` wire-format
-component (host-tested, 9/9). Implementation proceeds through
-`tasks/STATUS.md` — milestone M1 (pure-C libraries) is next. New hardware
-to order per unit: an SX1262 LoRa module, an SA818S-U voice module, and
-two whip antennas (~£25–35/unit — `docs/00` §Owned hardware).
+Scaffold complete on the **v3 architecture** (ESP32-S3; LoRa positions +
+digital transport-abstracted voice — see the decision log in
+`docs/00-brief.md` for the NRF24→two-radio→digital-voice evolution and the
+corrected UK legality analysis): docs, task queue, CI, and the
+`convoy_proto` wire-format component (host-tested, 9/9). Implementation
+proceeds through `tasks/STATUS.md` — milestone M1 (pure-C libraries) is
+next. New hardware to order per unit: an SX1262 LoRa module, an INMP441 I²S
+mic, a MAX98357A I²S amp, and a LoRa whip (~£20–25/unit — `docs/00`
+§Hardware). Voice's default transport (ESP-NOW) needs no extra radio.
 
 ## Quick start (contributors / agents)
 

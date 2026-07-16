@@ -40,8 +40,8 @@ typedef struct {
     uint32_t now_ms;
     /* radio/UI state */
     bool     ptt_tx, ptt_busy; /* TX tile / BUSY banner                  */
-    bool     rx_active;        /* generic RX indicator — analog voice
-                                  carries no talker id (docs/04)         */
+    int8_t   rx_talker_uid;    /* -1 none; else digital voice sender uid
+                                  → show initials + chip border (docs/04)*/
     rr_zoom_t zoom_mode;
     uint16_t zoom_scale_m;     /* resolved scale actually in use         */
 } rr_scene_t;

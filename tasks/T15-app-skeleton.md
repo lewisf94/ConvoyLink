@@ -16,10 +16,10 @@ queues, NVS identity + console — with stub task bodies that later tasks
   additionally enables the task watchdog on both idle tasks)
 - `firmware/apps/convoylink/main/`:
   - `main.c` — init order: NVS → unit_cfg → disp_init → splash →
-    sx1262_init (region freq from unit_cfg) → sa818_init + set_channel →
-    gps_uart_start → queues/state → task creation per the docs/01 table
-    (names, cores, prios exactly). Radio/voice init failures must not
-    halt boot (docs/01 §Error-handling: `RADIO?`/`VOICE?` tiles + retry)
+    sx1262_init (region freq from unit_cfg) → aio_init + voice transport
+    (from unit_cfg) → gps_uart_start → queues/state → task creation per the
+    docs/01 table (names, cores, prios exactly). Radio/voice init failures
+    must not halt boot (docs/01 §Error-handling: `RADIO?`/`VOICE?` tiles)
   - `app_state.h/.c` — `convoy_state_t` (own_fix + age, nt_t, voice_status,
     zoom mode) behind `state_lock()/unlock()/snapshot()`
   - `app_queues.h/.c` — `tx_q` (depth 8, 32-byte items) and `ctrl_q`
@@ -30,14 +30,14 @@ queues, NVS identity + console — with stub task bodies that later tasks
     `rr_screen_draw` scene from the snapshot even if empty; ctrl_task:
     debounces buttons into events; others: idle loop)
 - `firmware/components/unit_cfg/` — NVS-backed identity + radio config:
-  `unit_cfg_get(...)` for uid/initials/region/voice plan (false if
+  `unit_cfg_get(...)` for uid/initials/region/voice-transport (false if
   unprovisioned), esp_console REPL with `unitcfg set <0-4> <AA>` /
-  `unitcfg region <EU|US|AU>` / `unitcfg voice <plan> <ch>` /
-  `unitcfg show`, validation per docs/07 (docs/04 has the plan tables).
+  `unitcfg region <EU|US|AU>` / `unitcfg voice <espnow|sx1262>` /
+  `unitcfg show`, validation per docs/07.
 
 Unprovisioned boot: UI shows the `PROVISION ME` banner state
 (`rr_scene_t.provisioned = false`), all TX paths disabled (LoRa beacons
-and SA818 PTT), console works.
+and voice), console works.
 
 ## Acceptance — CI
 

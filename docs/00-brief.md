@@ -7,7 +7,8 @@ own radio network — **no mobile signal, no internet, no phones required**.
 ## What each unit does
 
 1. **Push-to-talk voice** — hold the PTT button, talk, release. Everyone else
-   hears you. Analog UHF FM (walkie-talkie grade), multi-km range, half-duplex.
+   hears you. Digital, half-duplex, speech-grade; carried licence-free over
+   ESP-NOW (default) or the SX1262/Codec2 link (`docs/04`).
 2. **Position beaconing** — broadcasts its own GPS position every 5 seconds
    over a LoRa data link with multi-km range.
 3. **Radar display** — a 2.8" screen showing every other car as a labelled dot
@@ -56,21 +57,55 @@ discrete build on owned parts. All noted as future experiments only.
 |---|---|---|
 | Target MCU | **ESP32-S3-DevKitC-1 (N16R8)** — supersedes the classic WROOM-32 | Voice went analog (no on-chip DAC needed), which was the only thing tying us to the classic part. S3 gives more RAM (8 MB PSRAM), native USB-JTAG/serial, more usable GPIO, faster CPU. ESP-IDF v5.3 targets it directly (`set-target esp32s3`) |
 | Voice packaging | **Integrated in the one unit** (confirmed with owner) | The device is deliberately all-in-one: GPS radar **and** push-to-talk voice in a single dash box. Separate handhelds were considered and rejected — the whole point is one device |
-| Voice legality (UK) | **SA818 programmed to PMR446, 0.5 W** as the shipped default | There is **no** fully-compliant, licence-free way to build integrated transmit-voice in the UK (licence-free voice requires type-approved, integral-antenna kit). This is the pragmatic hobbyist path: no licence to obtain, interoperates with shop-bought PMR446 radios, low practical risk at 0.5 W — but a home-built TX with an external antenna is **not strictly type-approved**. Documented honestly in `docs/04`. Owner accepts the trade-off for a small friends' build; ham 70 cm at 1 W is the fully-legal upgrade for anyone who gets a Foundation licence |
+| Voice legality (UK) | ~~SA818 on PMR446, 0.5 W~~ | **Superseded by v3, below.** This row's reasoning contained an error corrected in v3: it conflated "the SA818 arrangement isn't licence-exempt" with "there's no licence-exempt way to do voice at all." |
 
 If a specific S3 board other than the DevKitC-1 is used, only the pin map
 in `docs/02` changes — nothing structural.
 
-## Range expectations (post-v2, still honest)
+### v3 voice architecture — digital, transport-abstracted (2026-07-16)
+
+Correcting v2.1: calling the SA818-on-PMR446 plan a "grey area" was wrong.
+PMR446's licence exemption is conditional on the **equipment class** —
+hand-portable, **integral non-removable antenna**, ≤500 mW ERP, conformity
+to **EN 303 405**. An SA818 with an external/removable antenna fails those
+conditions by construction, so it would be *non-compliant licence-exempt
+operation*, not a grey area. (A CE-RED-marked SA818 is only a certified
+*component*; it doesn't make the finished device compliant PMR446 kit.)
+
+The real conclusion is the opposite of v2.1's: **licence-free all-in-one
+voice IS possible** — just not by bolting an antenna onto an SA818. The
+route is to keep the emission *inside an exemption's technical envelope*,
+which is the same legal basis our LoRa beacons already rely on:
+
+| Decision | Choice | Why |
+|---|---|---|
+| Voice = **digital, transport-abstracted** | One audio pipeline (I²S mic → codec → frames → jitter buffer → I²S amp); the transport is swappable | The pipeline is identical whatever carries the frames, so we don't have to bet on one radio — build the pipeline once, A/B the transports in the field |
+| **Ship ESP-NOW first** | PTT voice over the S3's own 2.4 GHz radio (ESP-NOW), ADPCM | Licence-free under the ≤100 mW EIRP wideband-data exemption; **zero new RF and no new parts** (radio's already on the board); validates the whole audio chain with no RF unknowns. Also architecturally clean — voice on Wi-Fi radio, positions on the SX1262, two independent radios, simultaneous |
+| **SX1262 / Codec2 as the range upgrade** | Half-duplex Codec2-3200 over GFSK at **869.7–870 MHz, 5 mW ERP** (licence-free, no duty-cycle limit on that sub-band) | ~9 dB sub-GHz propagation edge → roughly 2.5–3× the ESP-NOW range. Follow-on experiment: needs an FSK driver, Codec2, and shared-radio arbitration with the LoRa beacons — so it comes *after* the pipeline is proven on ESP-NOW |
+| **SA818 parked** | Kept as a documented **licensed variant** (ham 70 cm, 1 W), not in the core build | Fully legal *only* if every talker holds a Foundation licence. Best range/quality by far — the right answer for a licensed group, wrong default for a no-licence friends' build |
+| Talker identity | **Back** — digital frames carry the sender uid | Analog FM couldn't; digital can, so the radar shows *who* is talking again (`docs/06`) |
+
+Honest expectation: **both licence-free routes give up multi-km voice.**
+The radar (LoRa) stays the km-scale awareness layer; voice becomes the
+"roughly within sight" channel — which is when you actually talk. A fully
+type-approved integral-antenna PMR446 build is *theoretically* licence-free
+too, but needs EN 303 405 lab testing — disproportionate for a hobby run.
+Full detail and the corrected legality table live in `docs/04-voice.md`.
+
+## Range expectations (v3, honest)
 
 - **Radar (LoRa beacons):** 2–5 km car-to-car typical with window-mounted
   antennas, more line-of-sight, less in dense terrain. Single-hop relay
   through middle cars (`docs/03`) roughly doubles coverage along a
-  strung-out convoy.
-- **Voice (SA818, 1 W UHF):** 1–5 km typical mobile-to-mobile; terrain
-  dependent, degrades gracefully (static, not silence).
+  strung-out convoy. **This is the km-scale awareness layer.**
+- **Voice — ESP-NOW (ships first):** ~150–400 m car-to-car (2.4 GHz,
+  100 mW EIRP). Fine for a tight convoy; drops out when cars string out.
+- **Voice — SX1262/Codec2 (range upgrade):** ~500 m–1.5 km (869.7 MHz,
+  5 mW ERP, sub-GHz propagation). The field A/B decides the default.
+- **Voice — SA818 licensed variant:** 1–5 km, but needs ham licences.
 - **Ghost dots**: when a car's beacons stop, its dot greys out with a
   "last seen" age instead of vanishing — you always know where to backtrack.
+  This is why the radar, not voice, is the primary "where is everyone" tool.
 - Antenna placement guidance in `docs/02` matters more than any firmware.
 
 ## Hardware (design around these)
@@ -80,20 +115,24 @@ in `docs/02` changes — nothing structural.
 | MCU | **ESP32-S3-DevKitC-1 (N16R8)** — 16 MB flash, 8 MB PSRAM, 44-pin | **buy, ~£8–12/unit** (classic WROOM-32 retired to the spare drawer) |
 | GPS | GY-NEO6MV2 (u-blox NEO-6M) | owned |
 | Display | 2.8" ILI9341 SPI 240×320 (+XPT2046 touch, unused) | owned |
-| Mic | MAX9814 electret amp | owned |
-| Speaker amp + speaker | PAM8403 + AIYIMA 40 mm 4 Ω | owned |
+| **Mic** | **INMP441 I²S MEMS mic** | **buy, ~£2/unit** (MAX9814 → spare drawer) |
+| **Speaker amp** | **MAX98357A I²S class-D** (drives the 4 Ω speaker directly) | **buy, ~£2/unit** (PAM8403 → spare drawer) |
+| Speaker | AIYIMA 40 mm 4 Ω 3 W | owned |
 | Power | Mini MP1584EN bucks ×2, Schottky, caps | owned |
-| **Position radio** | **EBYTE E22-900M22S (SX1262) + 868/915 whip** | **buy, ~£7–10/unit** |
-| **Voice radio** | **NiceRF SA818S-U + UHF whip antenna** | **buy, ~£12–18/unit** |
-| (retired) | classic ESP32-WROOM-32, NRF24L01+ PA/LNA | spare drawer |
+| **Position + voice radio** | **EBYTE E22-900M22S (SX1262) + 868/915 whip** | **buy, ~£7–10/unit** (carries LoRa beacons; also the Codec2 voice transport) |
+| Voice (ESP-NOW) | none — the S3's built-in 2.4 GHz radio | — |
+| (optional, licensed variant) | NiceRF SA818S-U + UHF whip | buy only if going the ham route (`docs/04`) |
+| (retired) | classic ESP32-WROOM-32, NRF24L01+ PA/LNA, MAX9814, PAM8403 | spare drawer |
 
 ## Success criteria for v1.0
 
-- Two units on a bench exchange beacons and voice reliably at 30 m.
+- Two units on a bench exchange beacons and PTT voice reliably at 30 m.
 - Five units in cars: radar shows all cars with correct relative bearing and
   distance, updating ≤ 5 s, out to at least **2 km direct / 4 km relayed**.
-- PTT voice is intelligible at highway noise levels **at ≥ 1 km**, and
-  usable (increasing static) beyond.
+- PTT voice (ESP-NOW default) is intelligible at highway noise levels for a
+  **tight convoy (≤ ~300 m)**; the SX1262/Codec2 transport, once field-A/B'd,
+  extends that toward ~1 km. Talker's initials show on every radar.
+- Voice end-to-end latency stays "walkie-talkie instant" (< 250 ms).
 - A unit power-cycles with ignition and is on the radar within 60 s of
   GPS cold-start (typically much faster warm).
 - No lockups or resets over a 2-hour drive, any unit.
@@ -105,7 +144,7 @@ in `docs/02` changes — nothing structural.
 | `01-architecture.md` | Firmware structure, FreeRTOS tasks, dataflow, memory budget |
 | `02-hardware.md` | BOM, full pin map, wiring tables, power tree, antennas |
 | `03-radio-protocol.md` | LoRa link config, packet formats, duty budget, relay |
-| `04-voice-sa818.md` | SA818 integration: wiring, UART control, PTT, channels & legality |
+| `04-voice.md` | Digital voice: audio pipeline, codecs, jitter buffer, transport abstraction (ESP-NOW / SX1262-Codec2), legality, SA818 licensed-variant appendix |
 | `05-gps-geo.md` | NMEA parsing, geodesy math, neighbour table, staleness |
 | `06-ui.md` | Radar screen spec — exact layout, colours, states |
 | `07-dev-guide.md` | ESP-IDF setup, build/flash/test commands, provisioning |
