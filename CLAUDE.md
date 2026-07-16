@@ -1,6 +1,6 @@
 # CLAUDE.md — ConvoyLink agent guide
 
-ESP32 (classic WROOM-32) device: GPS radar + PTT voice for 5-car convoys.
+ESP32-S3 (DevKitC-1, N16R8) device: GPS radar + PTT voice for 5-car convoys.
 Two radios: SX1262 LoRa carries position beacons; an SA818 analog UHF
 module carries voice (firmware never touches audio samples). ESP-IDF v5.3
 native. **The design docs in `docs/` are law**; implementation happens
@@ -82,5 +82,5 @@ test/host/       gcc unit tests           sim/         SDL2 desktop radar sim
 tools/           CI scripts
 ```
 
-Build one app: `idf.py -C firmware/apps/<app> set-target esp32 build`
+Build one app: `idf.py -C firmware/apps/<app> set-target esp32s3 build`
 (more in `docs/07-dev-guide.md`).

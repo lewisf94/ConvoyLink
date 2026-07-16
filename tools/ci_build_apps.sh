@@ -17,7 +17,7 @@ fail=0
 for cmk in "${projects[@]}"; do
     app_dir=$(dirname "$cmk")
     echo "::group::Building ${app_dir}"
-    if idf.py -C "$app_dir" set-target esp32 && idf.py -C "$app_dir" build; then
+    if idf.py -C "$app_dir" set-target esp32s3 && idf.py -C "$app_dir" build; then
         echo "::endgroup::"
     else
         echo "::endgroup::"

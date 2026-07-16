@@ -26,7 +26,7 @@ Up to **5 units** per convoy (unit IDs 0–4). Each shows a 2-letter label
 | Decision | Choice | Notes |
 |---|---|---|
 | Toolchain | **ESP-IDF native** (v5.3.x, CMake, `idf.py`) | Not Arduino, not PlatformIO |
-| Target MCU | Classic **ESP32** (WROOM-32 dev board, 30-pin, USB-C) | |
+| Target MCU | Classic **ESP32** (WROOM-32 dev board, 30-pin, USB-C) | *Superseded by v2.1 → ESP32-S3, below* |
 | Scope extras | Module bring-up apps, host radar simulator, GitHub Actions CI | Enclosure CAD explicitly descoped |
 
 ### v2 radio architecture (2026-07-15, after the range/reliability study)
@@ -50,6 +50,17 @@ chosen ESP-IDF SX126x driver lacks FSK support. Integrated boards (LILYGO
 T-TWR Plus, T-Deck Plus) were evaluated and set aside in favour of the
 discrete build on owned parts. All noted as future experiments only.
 
+### v2.1 platform + voice-integration (2026-07-16)
+
+| Decision | Choice | Why |
+|---|---|---|
+| Target MCU | **ESP32-S3-DevKitC-1 (N16R8)** — supersedes the classic WROOM-32 | Voice went analog (no on-chip DAC needed), which was the only thing tying us to the classic part. S3 gives more RAM (8 MB PSRAM), native USB-JTAG/serial, more usable GPIO, faster CPU. ESP-IDF v5.3 targets it directly (`set-target esp32s3`) |
+| Voice packaging | **Integrated in the one unit** (confirmed with owner) | The device is deliberately all-in-one: GPS radar **and** push-to-talk voice in a single dash box. Separate handhelds were considered and rejected — the whole point is one device |
+| Voice legality (UK) | **SA818 programmed to PMR446, 0.5 W** as the shipped default | There is **no** fully-compliant, licence-free way to build integrated transmit-voice in the UK (licence-free voice requires type-approved, integral-antenna kit). This is the pragmatic hobbyist path: no licence to obtain, interoperates with shop-bought PMR446 radios, low practical risk at 0.5 W — but a home-built TX with an external antenna is **not strictly type-approved**. Documented honestly in `docs/04`. Owner accepts the trade-off for a small friends' build; ham 70 cm at 1 W is the fully-legal upgrade for anyone who gets a Foundation licence |
+
+If a specific S3 board other than the DevKitC-1 is used, only the pin map
+in `docs/02` changes — nothing structural.
+
 ## Range expectations (post-v2, still honest)
 
 - **Radar (LoRa beacons):** 2–5 km car-to-car typical with window-mounted
@@ -62,11 +73,11 @@ discrete build on owned parts. All noted as future experiments only.
   "last seen" age instead of vanishing — you always know where to backtrack.
 - Antenna placement guidance in `docs/02` matters more than any firmware.
 
-## Owned hardware (design around these) + v2 additions
+## Hardware (design around these)
 
 | Role | Module | Status |
 |---|---|---|
-| MCU | ESP32 DevKit 30-pin USB-C (WROOM-32) | owned |
+| MCU | **ESP32-S3-DevKitC-1 (N16R8)** — 16 MB flash, 8 MB PSRAM, 44-pin | **buy, ~£8–12/unit** (classic WROOM-32 retired to the spare drawer) |
 | GPS | GY-NEO6MV2 (u-blox NEO-6M) | owned |
 | Display | 2.8" ILI9341 SPI 240×320 (+XPT2046 touch, unused) | owned |
 | Mic | MAX9814 electret amp | owned |
@@ -74,7 +85,7 @@ discrete build on owned parts. All noted as future experiments only.
 | Power | Mini MP1584EN bucks ×2, Schottky, caps | owned |
 | **Position radio** | **EBYTE E22-900M22S (SX1262) + 868/915 whip** | **buy, ~£7–10/unit** |
 | **Voice radio** | **NiceRF SA818S-U + UHF whip antenna** | **buy, ~£12–18/unit** |
-| (retired) | NRF24L01+ PA/LNA | spare drawer |
+| (retired) | classic ESP32-WROOM-32, NRF24L01+ PA/LNA | spare drawer |
 
 ## Success criteria for v1.0
 

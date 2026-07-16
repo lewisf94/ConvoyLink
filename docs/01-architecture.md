@@ -52,7 +52,8 @@ never affects the radar.
 
 ## FreeRTOS task layout (app `convoylink`)
 
-Classic ESP32, two cores. Radio timing on core 1, everything else core 0.
+ESP32-S3, two Xtensa LX7 cores. Radio timing on core 1, everything else
+core 0.
 
 | Task | Core | Prio | Period / trigger | Role |
 |---|---|---|---|---|
@@ -99,7 +100,7 @@ flowchart LR
   end
 ```
 
-## Memory budget (ESP32-WROOM; Wi-Fi/BT never initialised)
+## Memory budget (ESP32-S3: 512 KB SRAM + 8 MB PSRAM; Wi-Fi/BT never initialised)
 
 | Buffer | Size | Notes |
 |---|---|---|
@@ -109,8 +110,12 @@ flowchart LR
 | UART buffers (GPS + SA818) | ~2 KB | Driver-owned, allocated at init |
 | Queues + stacks | ~20 KB | Stack sizes in code, reviewed per task |
 
-v2 deleted all audio DMA/jitter/PCM buffers (~30 KB back) — headroom is
-now generous. Wi-Fi and Bluetooth are **never initialised**.
+The S3's internal SRAM alone covers everything above with room to spare;
+the 8 MB PSRAM is unused by design (keeps the radio path allocation-free
+and deterministic — no PSRAM latency on hot paths). A full 240×320
+framebuffer (150 KB) would now *fit* in SRAM, but strip rendering stays for
+simplicity and to keep the `radar_render` contract identical to the
+simulator. Wi-Fi and Bluetooth are **never initialised**.
 
 ## Error-handling conventions
 

@@ -24,7 +24,7 @@ strip model, plus backlight PWM.
 #include "esp_err.h"
 #include <stdint.h>
 
-/* VSPI (SPI3_HOST) @ 40 MHz on CONVOY_PIN_TFT_*, portrait 240x320,
+/* SPI2_HOST (FSPI) @ 40 MHz on CONVOY_PIN_TFT_*, portrait 240x320,
  * USB-down orientation per docs/06. Owns the SPI bus (the display is its
  * only device in v2 — touch is descoped, docs/02). */
 esp_err_t disp_init(void);

@@ -18,7 +18,7 @@ pulls shared code via `EXTRA_COMPONENT_DIRS = ../../components`.
 
 ```sh
 cd firmware/apps/convoylink        # or any bringup_* app
-idf.py set-target esp32            # once per app checkout
+idf.py set-target esp32s3          # once per app checkout
 idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor   # Ctrl-] exits monitor
 ```
@@ -82,7 +82,7 @@ A task is not done until CI is green (`tasks/README.md`).
 
 | Symptom | Likely cause / fix |
 |---|---|
-| Boot loop with peripherals attached, fine bare | Strapping pin pulled — check nothing sits on GPIO 12, AUX/BOOT not held, and GPIO 2/15 wiring matches `docs/02` |
+| Boot loop with peripherals attached, fine bare | Strapping pin pulled — check nothing is bridged onto GPIO 0/3/45/46 and BOOT isn't held (S3 strapping, `docs/02`) |
 | `flash read err` / brownout resets | Buck A undervolt or USB+12 V fight; measure 5 V under load (SA818 TX pulls ~1 A) |
 | SX1262 init fails / BUSY stuck high | 3.3 V rail B missing/dirty, NRST not on GPIO 27, or TXEN/RXEN swapped — run `bringup_radio` |
 | LoRa "works on the bench, deaf in the car" | Antenna flat instead of vertical, or supply noise — caps at the module, window mount |

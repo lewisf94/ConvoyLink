@@ -16,7 +16,7 @@ Build any app:
 
 ```sh
 . ~/esp-idf/export.sh
-idf.py -C firmware/apps/<app> set-target esp32
+idf.py -C firmware/apps/<app> set-target esp32s3
 idf.py -C firmware/apps/<app> build            # flash monitor
 ```
 

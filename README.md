@@ -28,7 +28,7 @@ the ignition. Up to 5 cars.
 
 | Subsystem | Choice |
 |---|---|
-| MCU | ESP32-WROOM-32 (classic, 30-pin devkit) — ESP-IDF v5.3, no Arduino |
+| MCU | ESP32-S3-DevKitC-1 (N16R8) — ESP-IDF v5.3, no Arduino |
 | Position link | **LoRa** (Semtech SX1262, EBYTE E22-900M22S) @ 869/915 MHz — 32-byte beacons every 5 s, **single-hop relay through middle cars**. Same radio class Meshtastic proves at 1–5 miles car-to-car |
 | Voice | **Analog UHF FM** (NiceRF SA818S-U) — a complete walkie-talkie module; the ESP32 keys PTT and sets channel/CTCSS over UART, so firmware contains **zero audio code**. Channel plan is region config (PMR446 / ham / GMRS / UHF-CB — docs/04) |
 | Display | 2.8" ILI9341 SPI, 5 Hz strip-rendered radar with range rings, compass, staleness tiers (live → stale → ghost — dots age, they don't vanish) |

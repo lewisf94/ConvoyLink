@@ -24,7 +24,7 @@ project(<name>)
 `sdkconfig.defaults` (add app-specific lines below these):
 
 ```
-CONFIG_IDF_TARGET="esp32"
+CONFIG_IDF_TARGET="esp32s3"
 CONFIG_FREERTOS_HZ=1000
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 ```
@@ -40,7 +40,7 @@ idf_component_register(SRCS "main.c"
 Notes:
 
 - `sdkconfig` (generated) is git-ignored; only `sdkconfig.defaults` is
-  committed. CI runs `idf.py set-target esp32 build` per app.
+  committed. CI runs `idf.py set-target esp32s3 build` per app.
 - Never copy a component's sources into an app — depend on it.
 - Console-based apps use the IDF `esp_console` REPL on UART0 (see
   `bringup_radio` once it exists).
