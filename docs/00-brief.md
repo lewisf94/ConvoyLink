@@ -148,5 +148,6 @@ Full detail and the corrected legality table live in `docs/04-voice.md`.
 | `05-gps-geo.md` | NMEA parsing, geodesy math, neighbour table, staleness |
 | `06-ui.md` | Radar screen spec — exact layout, colours, states |
 | `07-dev-guide.md` | ESP-IDF setup, build/flash/test commands, provisioning |
+| `09-decisions.md` | Consolidated decision record — every major choice, why it won, and what was ruled out and why |
 | `../ROADMAP.md` | Milestones and task ordering |
 | `../tasks/` | Self-contained implementation tasks (the "bulk build" queue) |

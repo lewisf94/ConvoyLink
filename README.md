@@ -38,7 +38,7 @@ the ignition. Up to 5 cars.
 
 | Path | What |
 |---|---|
-| `docs/00…07` | Design docs — architecture, wiring, radio protocol, audio, geo, UI, dev guide. **Start at `docs/00-brief.md`** |
+| `docs/00…09` | Design docs — architecture, wiring, radio protocol, voice, geo, UI, dev guide. **Start at `docs/00-brief.md`**; `docs/09-decisions.md` is the what-was-chosen-and-why record |
 | `ROADMAP.md` | Milestones M1–M6 with gates |
 | `tasks/` | The implementation queue: 21 self-contained task specs with interface contracts + acceptance tests, designed for execution by AI coding agents (`CLAUDE.md` holds the standing rules). `tasks/STATUS.md` is the live board |
 | `firmware/` | ESP-IDF components + apps (`convoylink` + per-subsystem `bringup_*` test firmwares) |
