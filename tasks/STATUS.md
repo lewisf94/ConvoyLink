@@ -11,7 +11,7 @@ the analog SA818 is a documented licensed-variant appendix (no task).
 |---|---|---|---|---|---|
 | T01 | convoy_geo component | — | done | (this commit) | test fixture typo: spec said 45 e7-units≈5m, is ~0.5m; test covers both scales |
 | T02 | adpcm codec (pure C) | — | done | (this commit) | spec's 25 dB SNR bar unreachable: canonical IMA = 24.19 dB on the prescribed signal (search-encoder ties); test bar set to 23 dB with comment |
-| T03 | nmea parser component | — | todo | | |
+| T03 | nmea parser component | — | done | (this commit) | |
 | T04 | neighbor_table component | — | todo | | |
 | T05 | radar_render primitives | — | todo | | |
 | T06 | radar screen composition | T01,T04,T05 | todo | | |
