@@ -8,7 +8,7 @@ either **CI** (software) or a **hardware checklist** (user with real parts).
 
 Docs, task queue, CI, `convoy_proto` exemplar component + host tests.
 
-## M1 — Pure logic libraries (host-tested, no hardware)
+## M1 — Pure logic libraries ✅ (host-tested, no hardware)
 
 > T01 convoy_geo · T02 adpcm codec · T03 nmea · T04 neighbor_table ·
 > T05 radar_render primitives · T06 radar screen composition
@@ -19,7 +19,7 @@ the safest bulk work — do it first and strictly in order of dependencies
 pulled forward here once T02 is done.
 
 **Gate:** CI green; geo precision, codec reseed, and renderer
-strip-invariance tests pass.
+strip-invariance tests pass. **Met** — 51/51 host tests passing.
 
 ## M2 — Desktop simulator
 
