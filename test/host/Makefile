@@ -29,7 +29,7 @@ INC_test_voice_pipe  := -I$(FW)/voice_pipe/include -I$(FW)/adpcm/include \
 SRCS_test_nmea := $(FW)/nmea/nmea.c
 INC_test_nmea  := -I$(FW)/nmea/include -I$(FW)/convoy_proto/include
 
-SRCS_test_neighbor_table := $(FW)/neighbor_table/neighbor_table.c
+SRCS_test_neighbor_table := $(FW)/neighbor_table/neighbor_table.c $(FW)/convoy_proto/convoy_proto.c
 INC_test_neighbor_table  := -I$(FW)/neighbor_table/include -I$(FW)/convoy_proto/include
 
 SRCS_test_radar_render := $(wildcard $(FW)/radar_render/*.c)
