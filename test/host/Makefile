@@ -35,8 +35,11 @@ INC_test_neighbor_table  := -I$(FW)/neighbor_table/include -I$(FW)/convoy_proto/
 SRCS_test_radar_render := $(wildcard $(FW)/radar_render/*.c)
 INC_test_radar_render  := -I$(FW)/radar_render/include -I$(FW)/convoy_proto/include \
                           -I$(FW)/convoy_geo/include -I$(FW)/neighbor_table/include
-# radar_render's screen composition also links geo + neighbor_table:
-SRCS_test_radar_render += $(FW)/convoy_geo/convoy_geo.c $(FW)/neighbor_table/neighbor_table.c
+# radar_render's screen composition also links geo + neighbor_table (+
+# convoy_proto, which neighbor_table.h's cl_beacon_t / test fixtures need):
+SRCS_test_radar_render += $(FW)/convoy_geo/convoy_geo.c \
+                         $(FW)/neighbor_table/neighbor_table.c \
+                         $(FW)/convoy_proto/convoy_proto.c
 # ---------------------------------------------------------------------------
 
 TEST_SRCS := $(wildcard test_*.c)

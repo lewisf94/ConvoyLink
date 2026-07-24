@@ -1,8 +1,10 @@
-/* Host tests for radar_render primitives (docs/06). T06 extends this
- * suite with the screen-composition tests. */
+/* Host tests for radar_render primitives + screen composition (docs/06).
+ * T05 covers the primitives/font; T06 (below) covers rr_screen_draw. */
 #include "radar_render.h"
+#include "radar_scene.h"
 #include "tinytest.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -205,6 +207,230 @@ TT_TEST(font_hash_pinned)
     TT_ASSERT_EQ(h, 3553019093u);
 }
 
+/* ==================== T06: screen composition (docs/06) ================= */
+
+static nt_entry_t mk_entry(uint8_t uid, const char *initials, int32_t lat_e7,
+                          int32_t lon_e7, uint8_t fix_quality,
+                          uint32_t last_heard_ms)
+{
+    nt_entry_t e;
+    memset(&e, 0, sizeof(e));
+    e.in_use = true;
+    e.uid = uid;
+    e.initials[0] = initials[0];
+    e.initials[1] = initials[1];
+    cl_make_beacon(&e.last, uid, 1, initials, lat_e7, lon_e7, 0,
+                   CL_COURSE_INVALID, fix_quality, 5, 0);
+    e.last_seq = 1;
+    e.last_heard_ms = last_heard_ms;
+    return e;
+}
+
+static void build_busy_scene(rr_scene_t *sc)
+{
+    memset(sc, 0, sizeof(*sc));
+    sc->provisioned = true;
+    sc->self_uid = 0;
+    sc->self_initials[0] = 'L';
+    sc->self_initials[1] = 'F';
+    sc->own_fix = true;
+    sc->own_lat_e7 = 515000000;
+    sc->own_lon_e7 = 0;
+    sc->own_course_cdeg = 9000; /* 90.00 deg, arbitrary valid course */
+    sc->own_sats = 9;
+    sc->now_ms = 100000;
+    sc->ptt_tx = true;
+    sc->rx_talker_uid = -1;
+    sc->zoom_mode = RR_ZOOM_500;
+    sc->zoom_scale_m = 500;
+
+    sc->neighbors[0] = mk_entry(1, "AM", 515000000 + 9000, 0, 3,
+                               sc->now_ms - 1000); /* ~100m N, LIVE */
+    sc->neighbors[1] =
+        mk_entry(2, "RK", 515000000, 9000, 3, sc->now_ms - 20000); /* STALE */
+    sc->neighbors[2] = mk_entry(3, "JS", 515000000 - 9000, -9000, 3,
+                               sc->now_ms - 300000); /* GHOST */
+    sc->neighbors[3] = mk_entry(4, "TP", 515000000, 180000, 3,
+                               sc->now_ms - 500); /* ~2km E, off-scale @500m */
+    sc->n_neighbors = 4;
+}
+
+TT_TEST(screen_strip_invariance_busy_scene)
+{
+    rr_scene_t sc;
+    build_busy_scene(&sc);
+
+    static uint16_t full[RR_W * RR_H];
+    rr_fb_t full_fb = {full, 0, RR_H};
+    rr_screen_draw(&full_fb, &sc);
+
+    static uint16_t stitched[RR_W * RR_H];
+    for (int y0 = 0; y0 < RR_H; y0 += 20) {
+        uint16_t strip[RR_W * 20];
+        rr_fb_t strip_fb = {strip, y0, 20};
+        rr_screen_draw(&strip_fb, &sc);
+        memcpy(stitched + y0 * RR_W, strip, sizeof(strip));
+    }
+
+    TT_ASSERT_MEMEQ(full, stitched, sizeof(full));
+}
+
+TT_TEST(map_to_px_fixtures)
+{
+    int x, y;
+    rr_map_to_px(0.0f, 100.0f, 250, &x, &y);
+    TT_ASSERT_EQ(x, 120);
+    TT_ASSERT_EQ(y, 105);
+
+    rr_map_to_px(176.8f, -176.8f, 1000, &x, &y);
+    TT_ASSERT_EQ(x, 139);
+    TT_ASSERT_EQ(y, 167);
+}
+
+TT_TEST(live_neighbor_dot_and_background)
+{
+    rr_scene_t sc;
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.self_uid = 0;
+    sc.self_initials[0] = 'L';
+    sc.self_initials[1] = 'F';
+    sc.own_fix = true;
+    sc.own_lat_e7 = 515000000;
+    sc.own_lon_e7 = 0;
+    sc.own_course_cdeg = CL_COURSE_INVALID;
+    sc.now_ms = 10000;
+    sc.rx_talker_uid = -1;
+    sc.zoom_scale_m = 250;
+    sc.neighbors[0] =
+        mk_entry(1, "AM", 515000000 + 9000, 0, 3, sc.now_ms - 1000);
+    sc.n_neighbors = 1;
+
+    static uint16_t buf[RR_W * RR_H];
+    rr_fb_t fb = {buf, 0, RR_H};
+    rr_screen_draw(&fb, &sc);
+
+    TT_ASSERT_EQ(buf[105 * RR_W + 120], RR_UNIT_COLOR[1]);
+    TT_ASSERT_EQ(buf[191 * RR_W + 120], RR_BG);
+}
+
+TT_TEST(offscale_arrowhead_no_dot_beyond_ring)
+{
+    rr_scene_t sc;
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.own_fix = true;
+    sc.own_lat_e7 = 0;
+    sc.own_lon_e7 = 0;
+    sc.own_course_cdeg = CL_COURSE_INVALID;
+    sc.now_ms = 10000;
+    sc.rx_talker_uid = -1;
+    sc.zoom_scale_m = 500;
+
+    /* due-east 2km at the equator -> bearing exactly 90 deg */
+    int32_t dlon_e7 = (int32_t)(2000.0 /
+                                (6371000.0 * (3.14159265358979323846 / 180.0)) *
+                                1e7);
+    sc.neighbors[0] = mk_entry(2, "ZZ", 0, dlon_e7, 3, sc.now_ms - 1000);
+    sc.n_neighbors = 1;
+
+    static uint16_t buf[RR_W * RR_H];
+    rr_fb_t fb = {buf, 0, RR_H};
+    rr_screen_draw(&fb, &sc);
+
+    uint16_t color = RR_UNIT_COLOR[2];
+
+    /* radar area only (28..267) - the neighbour strip below it legitimately
+     * shows this same unit colour in its chip text, far from centre */
+    for (int y = 28; y < 268; y++) {
+        for (int x = 0; x < RR_W; x++) {
+            if (buf[y * RR_W + x] == color) {
+                float ddx = (float)(x - 120), ddy = (float)(y - 148);
+                TT_ASSERT(sqrtf(ddx * ddx + ddy * ddy) <= 110.0f);
+            }
+        }
+    }
+
+    bool found = false;
+    for (int y = 145; y <= 151 && !found; y++) {
+        for (int x = 224; x <= 232 && !found; x++) {
+            if (buf[y * RR_W + x] == color) {
+                found = true;
+            }
+        }
+    }
+    TT_ASSERT(found);
+}
+
+TT_TEST(pick_zoom_fixtures)
+{
+    TT_ASSERT_EQ(rr_pick_zoom(0.0f), 250);
+    TT_ASSERT_EQ(rr_pick_zoom(220.0f), 250);
+    TT_ASSERT_EQ(rr_pick_zoom(226.0f), 500);
+    TT_ASSERT_EQ(rr_pick_zoom(3400.0f), 4000);
+    TT_ASSERT_EQ(rr_pick_zoom(99999.0f), 4000);
+}
+
+TT_TEST(no_fix_scene_hash_pinned)
+{
+    rr_scene_t sc;
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.self_uid = 0;
+    sc.self_initials[0] = 'L';
+    sc.self_initials[1] = 'F';
+    sc.own_fix = false; /* the point of this test */
+    sc.now_ms = 12345;  /* fixed: deterministic NO FIX blink phase */
+    sc.rx_talker_uid = -1;
+    sc.zoom_scale_m = 250;
+    sc.neighbors[0] = mk_entry(1, "AM", 515000000, 0, 3, sc.now_ms - 1000);
+    sc.n_neighbors = 1; /* strip must still show it; radar must not */
+
+    static uint16_t buf[RR_W * RR_H];
+    rr_fb_t fb = {buf, 0, RR_H};
+    rr_screen_draw(&fb, &sc);
+
+    for (int y = 28; y < 268; y++) {
+        for (int x = 0; x < RR_W; x++) {
+            TT_ASSERT(buf[y * RR_W + x] != RR_UNIT_COLOR[1]);
+        }
+    }
+
+    uint32_t h = fnv1a(&buf[28 * RR_W], (size_t)(268 - 28) * RR_W * sizeof(uint16_t));
+    /* FNV-1a of the radar area (rows 28..267) for this exact NO-FIX scene
+     * (own_fix=false, one tracked-but-unplotted neighbour, now_ms=12345) —
+     * computed once, pinned to catch accidental banner/layout regressions. */
+    TT_ASSERT_EQ(h, 4281412827u);
+}
+
+TT_TEST(waiting_scene_hash_pinned)
+{
+    rr_scene_t sc;
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.self_uid = 2;
+    sc.self_initials[0] = 'J';
+    sc.self_initials[1] = 'S';
+    sc.own_fix = true;
+    sc.own_lat_e7 = 515000000;
+    sc.own_lon_e7 = 0;
+    sc.own_course_cdeg = CL_COURSE_INVALID;
+    sc.own_sats = 7;
+    sc.now_ms = 54321;
+    sc.rx_talker_uid = -1;
+    sc.zoom_scale_m = 250;
+    sc.n_neighbors = 0; /* the point of this test */
+
+    static uint16_t buf[RR_W * RR_H];
+    rr_fb_t fb = {buf, 0, RR_H};
+    rr_screen_draw(&fb, &sc);
+
+    uint32_t h = fnv1a(&buf[28 * RR_W], (size_t)(268 - 28) * RR_W * sizeof(uint16_t));
+    /* FNV-1a of the radar area for this exact "waiting for convoy" scene —
+     * computed once, pinned (docs/06, T06). */
+    TT_ASSERT_EQ(h, 3903215319u);
+}
+
 int main(void)
 {
     TT_RUN(strip_invariance);
@@ -214,5 +440,12 @@ int main(void)
     TT_RUN(filled_circle_symmetric);
     TT_RUN(text_scale_and_advance);
     TT_RUN(font_hash_pinned);
+    TT_RUN(screen_strip_invariance_busy_scene);
+    TT_RUN(map_to_px_fixtures);
+    TT_RUN(live_neighbor_dot_and_background);
+    TT_RUN(offscale_arrowhead_no_dot_beyond_ring);
+    TT_RUN(pick_zoom_fixtures);
+    TT_RUN(no_fix_scene_hash_pinned);
+    TT_RUN(waiting_scene_hash_pinned);
     return tt_summary("radar_render");
 }
