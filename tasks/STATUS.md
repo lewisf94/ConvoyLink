@@ -16,7 +16,7 @@ the analog SA818 is a documented licensed-variant appendix (no task).
 | T05 | radar_render primitives | — | done | (this commit) | |
 | T06 | radar screen composition | T01,T04,T05 | done | (this commit) | M1 complete — all 6 pure-C components done, 51/51 host tests |
 | T07 | simulator runner (SDL2) | T06 | done | (this commit) | docs/07's CLI example says "PNGs"/no `--headless`; task spec (BMP, separate flags) is authoritative, implemented as specced |
-| T08 | simulator scenarios + range model | T07 | todo | | |
+| T08 | simulator scenarios + range model | T07 | done | (this commit) | extracted sim_core.c from main.c; replay_to's RX gating changed from scn_sample "present" to track "used" (+first-waypoint stand-in position while un-fixed) so a no-fix unit still receives/tracks neighbours per docs/05 — sim-only behaviour, no wire format touched |
 | T09 | sx1262 LoRa driver + convoy_pins | — | todo | | |
 | T10 | bringup_radio app (LoRa ping/RSSI) | T09 | todo | | |
 | T11 | gps_uart + bringup_gps app | T03 | todo | | |

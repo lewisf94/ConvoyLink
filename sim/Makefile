@@ -9,7 +9,8 @@ SDL_LIBS   := $(shell pkg-config --libs sdl2)
 
 FW := ../firmware/components
 
-SRCS := src/main.c src/scenario.c src/frame_dump.c \
+SRCS := src/main.c src/scenario.c src/frame_dump.c src/sim_core.c \
+       src/checks.c \
        $(FW)/convoy_geo/convoy_geo.c \
        $(FW)/convoy_proto/convoy_proto.c \
        $(FW)/neighbor_table/neighbor_table.c \
@@ -32,8 +33,8 @@ build/convoysim: $(SRCS) src/*.h | build
 build:
 	mkdir -p build
 
-# Builds, renders the bundled scenario headless, and sanity-checks the
-# BMP dump (T08 extends this target with scripted --check runs).
+# Builds, renders the bundled scenario headless, sanity-checks the BMP
+# dump, and runs the scripted --check scenarios (T08).
 smoke: build/convoysim
 	rm -rf build/frames
 	./build/convoysim scenarios/overtake.csv --pov 0 --headless --dump build/frames
@@ -47,6 +48,9 @@ smoke: build/convoysim
 		fi; \
 	done
 	@echo "smoke: all frames are the expected 230454 bytes"
+	./build/convoysim scenarios/split_rejoin.csv --check
+	./build/convoysim scenarios/no_fix_start.csv --check
+	./build/convoysim scenarios/convoy_cruise.csv --check
 
 clean:
 	rm -rf build

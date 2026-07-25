@@ -21,7 +21,7 @@ pulled forward here once T02 is done.
 **Gate:** CI green; geo precision, codec reseed, and renderer
 strip-invariance tests pass. **Met** — 51/51 host tests passing.
 
-## M2 — Desktop simulator
+## M2 — Desktop simulator ✅
 
 > T07 sim runner (SDL2) · T08 scenarios + headless PNG dump
 
@@ -29,7 +29,9 @@ Runs the real M1 code against scripted GPS tracks. From here on, UI changes
 are reviewed as sim screenshots. Independent of M3 — can interleave.
 
 **Gate:** `convoysim overtake.csv --dump` produces frames showing 3 cars,
-correct bearings/distances (asserted in the scenario smoke test).
+correct bearings/distances (asserted in the scenario smoke test). **Met** —
+`make -C sim smoke` green: overtake.csv frame dump + split_rejoin/
+no_fix_start/convoy_cruise `--check` scenarios all pass.
 
 ## M3 — Drivers & bring-up apps (first hardware contact)
 

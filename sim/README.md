@@ -20,7 +20,7 @@ runtime — `--headless` never touches SDL).
 
 ```
 convoysim <scenario.csv> [--pov N] [--speed X] [--range M]
-          [--loss P] [--dump DIR] [--headless] [--seed S]
+          [--loss P] [--dump DIR] [--headless] [--check] [--seed S]
 ```
 
 | Flag | Default | Meaning |
@@ -31,6 +31,7 @@ convoysim <scenario.csv> [--pov N] [--speed X] [--range M]
 | `--loss P` | 0 | Per-hop packet loss probability, 0.0–1.0 |
 | `--dump DIR` | — | Write `frame_NNNN.bmp` each render into DIR |
 | `--headless` | off | No window; runs to the end of the scenario as fast as possible. Also triggered by `SDL_VIDEODRIVER=dummy` in the environment |
+| `--check` | off | No window/dump; runs the scenario's scripted assertions (`src/checks.c`, matched by CSV basename) and exits non-zero on failure. See `tasks/T08-sim-scenarios.md` |
 | `--seed S` | 1 | Seeds the deterministic loss-roll PRNG — same seed + scenario always produces the same delivered/dropped beacons |
 
 ## Keys (windowed mode)
@@ -70,6 +71,16 @@ of *both* sender and receiver, a single-hop relay copy is attempted (its
 own independent loss roll) — a simplified version of the real single-hop
 relay in `docs/03-radio-protocol.md`.
 
+A unit can **receive** as soon as it appears anywhere in the CSV, even
+before its own first waypoint: a real radio listens from power-on
+independent of GPS lock (`docs/05-gps-geo.md` — no own fix is not the
+same as not receiving). While it hasn't reached its first waypoint yet it
+has no position of its own, so for range purposes only it's treated as
+stationary at that first waypoint (`sim_core.c`'s `net_position`) —
+modelling a unit sitting still while it waits for a cold-start fix. This
+is what `no_fix_start.csv` exercises: the neighbour table fills in
+normally in the background while `own_fix` is false.
+
 State is never stepped incrementally: every render **fully replays** every
 beacon event from t=0 up to the requested sim time into fresh neighbour
 tables. This is what makes the `←`/`→` scrub keys trivially correct (no
@@ -80,3 +91,6 @@ tables. This is what makes the `←`/`→` scrub keys trivially correct (no
 | File | Demonstrates |
 |---|---|
 | `overtake.csv` | Three cars on a straight road; one overtakes and settles ahead, one starts out of range and catches up |
+| `convoy_cruise.csv` | 5-car tight convoy, 5 min, everyone stays LIVE; one car accordions 150–700 m back to exercise chip sorting and auto-zoom both ways |
+| `split_rejoin.csv` | 3 cars; one takes a 3-minute detour beyond radio range (LIVE→STALE→GHOST) with a relay-sustained stretch, then rejoins (GHOST→LIVE) |
+| `no_fix_start.csv` | POV has no GPS fix for the first 60 s while neighbours are already beaconing (`docs/06-ui.md` NO FIX state) |
