@@ -1,0 +1,3 @@
+idf_component_register(SRCS "main.c"
+                       INCLUDE_DIRS "."
+                       REQUIRES sx1262 convoy_proto console esp_timer)
