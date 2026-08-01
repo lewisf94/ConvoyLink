@@ -32,9 +32,74 @@ static const char *TAG = "ui_task";
 #define STRIP_H 20     /* docs/06 rendering contract */
 #define STRIPS (RR_H / STRIP_H)
 
+/* docs/06: auto-zoom changes at most every 2 s. rr_pick_zoom already
+ * encodes the 90 %-of-scale rule, so this only rate-limits it. */
+#define ZOOM_MIN_INTERVAL_MS 2000
+
+/* docs/05 §Own course: below 1.5 m/s hold the last valid course for the
+ * compass arrow, then hide it after 60 s stationary. */
+#define COURSE_HOLD_MS 60000
+
+/* AUX hold cycles these (docs/06). */
+static const uint8_t BACKLIGHT_STEPS[] = {100, 60, 25};
+
 /* One strip buffer: disp_flush is synchronous (T14's contract), so a
  * second buffer would never be filled while the first is in flight. */
 static uint16_t s_strip[RR_W * STRIP_H];
+
+/* Applied auto-zoom scale and when it last changed (hysteresis state). */
+static uint16_t s_auto_scale;
+static uint32_t s_auto_changed_ms;
+
+/* Last course we considered valid, for the hold-then-hide rule. */
+static uint16_t s_held_course = CL_COURSE_INVALID;
+static uint32_t s_held_course_ms;
+
+static uint8_t s_backlight_idx;
+
+/*
+ * docs/05: the arrow follows live course above 1.5 m/s; below that it
+ * holds the last valid one for 60 s and then disappears, so a car waiting
+ * at lights keeps a sensible heading instead of spinning.
+ */
+static uint16_t resolve_own_course(const nmea_fix_t *fix, uint32_t now)
+{
+    if (fix->valid && fix->speed_dm_s >= CL_COURSE_VALID_DM_S &&
+        fix->course_cdeg != CL_COURSE_INVALID) {
+        s_held_course = fix->course_cdeg;
+        s_held_course_ms = now;
+        return s_held_course;
+    }
+    if (s_held_course != CL_COURSE_INVALID &&
+        (uint32_t)(int32_t)(now - s_held_course_ms) < COURSE_HOLD_MS) {
+        return s_held_course;
+    }
+    s_held_course = CL_COURSE_INVALID;
+    return CL_COURSE_INVALID;
+}
+
+/*
+ * Auto-zoom with docs/06 hysteresis: adopt rr_pick_zoom's answer only if
+ * it differs and at least 2 s has passed since the last change. Note this
+ * is exactly the two rules the doc gives (90 % crossing, 2 s apart) and
+ * nothing more — a car parked on a boundary can still oscillate at 0.5 Hz.
+ * Adding a deadband would mean inventing a threshold; that belongs to
+ * T20's polish pass if the field shows it matters.
+ */
+static uint16_t resolve_auto_zoom(float max_dist_m, uint32_t now)
+{
+    uint16_t ideal = rr_pick_zoom(max_dist_m);
+    if (s_auto_scale == 0) {
+        s_auto_scale = ideal;
+        s_auto_changed_ms = now;
+    } else if (ideal != s_auto_scale &&
+               (uint32_t)(int32_t)(now - s_auto_changed_ms) >=
+                   ZOOM_MIN_INTERVAL_MS) {
+        s_auto_scale = ideal;
+        s_auto_changed_ms = now;
+    }
+    return s_auto_scale;
+}
 
 static void build_scene(const convoy_state_t *st, uint32_t now,
                         rr_scene_t *sc)
@@ -49,7 +114,7 @@ static void build_scene(const convoy_state_t *st, uint32_t now,
     sc->own_fix = st->own_fix.valid;
     sc->own_lat_e7 = st->own_fix.lat_e7;
     sc->own_lon_e7 = st->own_fix.lon_e7;
-    sc->own_course_cdeg = st->own_fix.course_cdeg;
+    sc->own_course_cdeg = resolve_own_course(&st->own_fix, now);
     sc->own_sats = st->own_fix.sats;
 
     sc->now_ms = now;
@@ -77,10 +142,13 @@ static void build_scene(const convoy_state_t *st, uint32_t now,
                 }
             }
         }
-        sc->zoom_scale_m = rr_pick_zoom(max_dist);
+        sc->zoom_scale_m = resolve_auto_zoom(max_dist, now);
     } else {
         static const uint16_t fixed[] = {0, 250, 500, 1000, 2000, 4000};
         sc->zoom_scale_m = fixed[st->zoom_mode];
+        /* Re-entering auto should re-evaluate immediately, not inherit a
+         * stale applied scale from before the manual excursion. */
+        s_auto_scale = 0;
     }
 }
 
@@ -88,15 +156,36 @@ static void drain_ctrl_events(void)
 {
     ctrl_event_t ev;
     while (ctrl_q_recv(&ev, 0)) {
-        if (ev.type != BTN_AUX_PRESS) {
-            continue; /* PTT belongs to voice_task from T18 */
+        switch (ev.type) {
+        case BTN_AUX_PRESS: {
+            /* auto -> 250 -> 500 -> 1k -> 2k -> 4k -> auto (docs/06) */
+            state_lock();
+            convoy_state_t *st = state_get();
+            st->zoom_mode = (rr_zoom_t)((st->zoom_mode + 1) % 6);
+            rr_zoom_t z = st->zoom_mode;
+            state_unlock();
+            ESP_LOGD(TAG, "zoom mode -> %d", (int)z);
+            break;
         }
-        state_lock();
-        convoy_state_t *st = state_get();
-        st->zoom_mode = (rr_zoom_t)((st->zoom_mode + 1) % 6);
-        rr_zoom_t z = st->zoom_mode;
-        state_unlock();
-        ESP_LOGD(TAG, "zoom -> %d", (int)z);
+        case BTN_AUX_HOLD: {
+            s_backlight_idx = (uint8_t)((s_backlight_idx + 1) %
+                                        (sizeof BACKLIGHT_STEPS /
+                                         sizeof BACKLIGHT_STEPS[0]));
+            uint8_t pct = BACKLIGHT_STEPS[s_backlight_idx];
+            (void)disp_backlight_pct(pct);
+            ESP_LOGD(TAG, "backlight -> %u%%", pct);
+            break;
+        }
+        case BTN_PTT_DOWN:
+        case BTN_PTT_UP:
+            /* Produced by ctrl_task, consumed by voice_task from T18.
+             * Logged here so the button path is observable meanwhile. */
+            ESP_LOGD(TAG, "PTT %s (no consumer until T18)",
+                     ev.type == BTN_PTT_DOWN ? "down" : "up");
+            break;
+        default:
+            break;
+        }
     }
 }
 

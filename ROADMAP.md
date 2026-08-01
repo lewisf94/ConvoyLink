@@ -56,10 +56,19 @@ STATUS.md.
 > T15 app skeleton (tasks/queues/NVS provisioning/console) ·
 > T16 radio task + beacons + relay · T17 GPS + neighbour + radar UI
 
-**Gate (field):** two units in two cars, 30-minute drive: dots track with
-correct bearing/distance, staleness tiers behave when separating, both
-units run the whole drive without reset. This is the first "take it
-outside" moment — do it before starting voice.
+All three tasks are **code-complete and CI-green** (T15–T17); the app's
+checklist is in `firmware/apps/convoylink/README.md`.
+
+**Gate (field — awaiting the owner and real parts):** two units in two
+cars, 30-minute drive: dots track with correct bearing/distance,
+staleness tiers behave when separating, both units run the whole drive
+without reset. This is the first "take it outside" moment — do it before
+starting voice.
+
+Before that drive, read the reboot-`seq` finding at the bottom of
+`tasks/T16-radio-task.md`: a unit power-cycled mid-convoy can stay
+invisible to still-running peers for up to ~40 minutes, and it needs an
+owner decision to fix.
 
 ## M5 — Voice `v0.5` (digital, ESP-NOW)
 

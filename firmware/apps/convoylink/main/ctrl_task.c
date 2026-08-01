@@ -17,12 +17,15 @@ static const char *TAG = "ctrl_task";
 
 #define DEBOUNCE_MS 50
 #define POLL_MS 10
+#define AUX_HOLD_MS 2000 /* docs/06: AUX hold = backlight cycle */
 
 typedef struct {
     int pin;
     bool stable;      /* debounced level: true = pressed */
     bool last_raw;
     uint32_t changed_ms;
+    uint32_t pressed_ms; /* when the debounced press began   */
+    bool hold_fired;     /* hold already reported this press  */
 } button_t;
 
 static uint32_t now_ms(void)
@@ -36,6 +39,8 @@ static void button_init(button_t *b, int pin)
     b->stable = false;
     b->last_raw = false;
     b->changed_ms = 0;
+    b->pressed_ms = 0;
+    b->hold_fired = false;
 
     gpio_config_t io = {
         .pin_bit_mask = 1ULL << pin,
@@ -60,7 +65,24 @@ static bool button_poll(button_t *b, uint32_t now, bool *pressed)
     if (raw != b->stable &&
         (uint32_t)(int32_t)(now - b->changed_ms) >= DEBOUNCE_MS) {
         b->stable = raw;
+        if (raw) {
+            b->pressed_ms = now;
+            b->hold_fired = false;
+        }
         *pressed = raw;
+        return true;
+    }
+    return false;
+}
+
+/* True once, the moment a still-held button passes AUX_HOLD_MS. */
+static bool button_hold_elapsed(button_t *b, uint32_t now)
+{
+    if (!b->stable || b->hold_fired) {
+        return false;
+    }
+    if ((uint32_t)(int32_t)(now - b->pressed_ms) >= AUX_HOLD_MS) {
+        b->hold_fired = true;
         return true;
     }
     return false;
@@ -87,10 +109,19 @@ void ctrl_task(void *arg)
             ctrl_q_send(&ev);
             ESP_LOGD(TAG, "PTT %s", pressed ? "down" : "up");
         }
-        if (button_poll(&aux, now, &pressed) && pressed) {
-            ctrl_event_t ev = {.type = BTN_AUX_PRESS, .t_ms = now};
+        /* AUX: short press fires on RELEASE, so a long hold can claim the
+         * press instead (docs/06: short = zoom, 2 s hold = backlight). */
+        if (button_poll(&aux, now, &pressed)) {
+            if (!pressed && !aux.hold_fired) {
+                ctrl_event_t ev = {.type = BTN_AUX_PRESS, .t_ms = now};
+                ctrl_q_send(&ev);
+                ESP_LOGD(TAG, "AUX short press");
+            }
+        }
+        if (button_hold_elapsed(&aux, now)) {
+            ctrl_event_t ev = {.type = BTN_AUX_HOLD, .t_ms = now};
             ctrl_q_send(&ev);
-            ESP_LOGD(TAG, "AUX press");
+            ESP_LOGD(TAG, "AUX hold");
         }
 
         if ((uint32_t)(int32_t)(now - last_beat) >= TASK_HEARTBEAT_MS) {

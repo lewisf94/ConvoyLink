@@ -27,7 +27,8 @@ typedef struct {
 typedef enum {
     BTN_PTT_DOWN = 0,
     BTN_PTT_UP,
-    BTN_AUX_PRESS,
+    BTN_AUX_PRESS, /* short press -> cycle zoom mode      */
+    BTN_AUX_HOLD,  /* >= 2 s hold -> cycle backlight level */
 } ctrl_event_type_t;
 
 typedef struct {
