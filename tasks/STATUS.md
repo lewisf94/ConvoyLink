@@ -21,7 +21,7 @@ the analog SA818 is a documented licensed-variant appendix (no task).
 | T10 | bringup_radio app (LoRa ping/RSSI) | T09 | done | (this commit) | first app — ci_build_apps.sh now really builds (also covers T09). Spec's 2/s ping default is 12.2% duty vs docs/03's EU 10% cap, and the same line says respect the budget: EU clamps to 610 ms (~1.64/s) and says so, US/AU unclamped per docs/03. Owner may want the task's default restated as 1.5/s |
 | T11 | gps_uart + bringup_gps app | T03 | done | (this commit) | task's contract says UART2, docs/02 pin table says UART1 (UART0 is the console) — used UART1 per docs-are-law; owner may want T11's comment corrected |
 | T12 | audio_io: I²S mic + speaker | — | done | (this commit) | v3: was sa818. 32-bit slots BOTH ways, not 16-bit TX: one shared BCLK can't serve two slot widths, so playback rides the top 16 bits (API stays int16). Mic gain left at unity for T21 to tune. CI can't reach it until T13's app |
-| T13 | bringup_audio: I²S/codec bench | T12,T02 | todo | | v3: was bringup_voice |
+| T13 | bringup_audio: I²S/codec bench | T12,T02 | done | (this commit) | v3: was bringup_voice. `codec` runs the round-trip per 20 ms frame (docs/04 seeding), not bulk, so the preview matches on-air. Recording capped at 5 s / 80 KB static; DIRAM 41.7%, 199 KB free. Also brings T12 under CI |
 | T14 | ili9341_disp + bringup_display app | T09* | todo | | *needs convoy_pins only |
 | T15 | convoylink app skeleton | T09,T12,T14 | todo | | |
 | T16 | radio task: beacons + relay | T04,T10,T15 | todo | | |

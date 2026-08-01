@@ -1,0 +1,8 @@
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_FREERTOS_HZ=1000
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# esp_console REPL on UART0 (docs/07 §Build) - the console owns stdin, so
+# line editing needs the VFS/termios plumbing enabled.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_VFS_SUPPORT_TERMIOS=y
