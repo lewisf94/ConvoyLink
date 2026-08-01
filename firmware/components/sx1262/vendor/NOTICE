@@ -1,0 +1,58 @@
+Vendored third-party code
+=========================
+
+Files:   ra01s.c, ra01s.h
+Origin:  https://github.com/nopnop2002/esp-idf-sx126x
+         path components/ra01s/
+Commit:  f5e0e7a2bb5d136d13f1d5c095de59a1e6224acf (2026-07-18)
+Licence: MIT — Copyright (c) 2022 nopnop2002. Full text in ./LICENSE
+         (the upstream repo's root LICENSE; the two source files carry no
+         per-file header of their own).
+
+This is the ConvoyLink firmware's one allowed external dependency (task
+T09). Everything above it — `../sx1262.c` / `../include/sx1262.h` — is
+ConvoyLink's own wrapper and is the only API the rest of the firmware may
+use.
+
+
+Local patches
+-------------
+
+Kept deliberately small; each is marked in-place with a
+`[ConvoyLink patch N/4]` comment so a future re-vendor can find them.
+
+1. ra01s.c — added `#include "convoy_pins.h"`, and replaced the
+   `CONFIG_SPI2_HOST`/`CONFIG_SPI3_HOST` conditional with a fixed
+   `HOST_ID = SPI3_HOST`.
+   Why: docs/02 puts the SX1262 on SPI3, and the pin map is owned by
+   convoy_pins.h — not by this driver's Kconfig menu.
+
+2. ra01s.c — `LoRaInit` now takes its eight GPIO numbers from
+   `CONVOY_PIN_LORA_*` instead of `CONFIG_*_GPIO`, returns `esp_err_t`
+   instead of `void`, and returns that error instead of `assert()`ing when
+   `spi_bus_initialize` / `spi_bus_add_device` fail (freeing the bus on the
+   second). The eight `ESP_LOGI` lines echoing each CONFIG_ value became
+   one line.
+   Why: docs/01 requires the radio to fail soft — the app retries every 5 s
+   and shows `RADIO?` — so init must never abort the firmware.
+
+3. ra01s.h — `LoRaInit`'s declaration updated to match (2), plus an
+   `#include "esp_err.h"` for the return type.
+
+4. ra01s.c — `LoRaSend` arms the modem with `SetTx(200)` rather than
+   `SetTx(500)`.
+   Why: a 32-byte SF7/125 kHz/4:5 packet is ~61 ms on air (docs/03), and
+   this modem timeout is what bounds `LoRaSend`'s synchronous wait loop —
+   200 ms is >3x margin and matches the send timeout documented in
+   `sx1262.h`.
+
+Not patched, handled in the wrapper instead:
+
+- `LoRaError()` is declared `__attribute__((weak, alias(...)))` over a
+  default that loops forever. `sx1262.c` defines a strong replacement and
+  uses `setjmp`/`longjmp` to turn an init-time fault into an error return,
+  so no edit to the vendored file was needed.
+- `Kconfig.projbuild` was not vendored at all: every setting it exposed
+  (frequency, SF, BW, CR, pins) is fixed by docs/02 and docs/03 and is
+  programmed from `sx1262.c`, so a menuconfig knob for any of them would
+  be a second source of truth.
