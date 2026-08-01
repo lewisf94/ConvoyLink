@@ -8,6 +8,7 @@
 #include "app_queues.h"
 #include "app_state.h"
 #include "app_tasks.h"
+#include "radio_stats.h"
 
 #include "audio_io.h"
 #include "esp_console.h"
@@ -95,6 +96,7 @@ static void start_console(void)
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_cfg, &repl_cfg, &repl));
     ESP_ERROR_CHECK(esp_console_register_help_command());
     ESP_ERROR_CHECK(unit_cfg_register_console());
+    ESP_ERROR_CHECK(radio_stats_register_console());
 
     static const esp_console_cmd_t cmds[] = {
         {.command = "free",

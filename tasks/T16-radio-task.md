@@ -52,3 +52,50 @@ doc, exactly.
 
 Voice anything (separate radio + task entirely — T18), UI changes
 (ui_task already renders whatever the table says).
+
+---
+
+## Finding — beacon `seq` does not survive a reboot (owner decision needed)
+
+Found while implementing T16; **not fixed here**, because every fix
+touches a contract this task does not own.
+
+`seq` starts at 0 each boot, and `nt_update_from_beacon` only accepts a
+beacon when `cl_seq_newer(b.seq, entry.last_seq)`. So a unit that reboots
+is ignored by any peer that is still running and still remembers it,
+until its fresh `seq` climbs past the remembered one.
+
+Measured with a host harness against the real `convoy_proto` +
+`neighbor_table` sources:
+
+```
+before reboot: last_seq=500
+after reboot:  0 of 20 beacons accepted, last_seq=500
+first seq accepted again: 501  (= ~2505 s ≈ 42 min at one beacon per 5 s)
+```
+
+The remembered entry does not age out of the way either: `NT_GONE` at
+15 min hides an entry from `nt_snapshot` but leaves `in_use` set, so the
+sequence check still applies.
+
+Field symptom: power-cycle one car mid-convoy and it vanishes from
+everyone else's radar for up to ~40 minutes, while its own radar looks
+perfectly healthy. Two units booted together are unaffected, which is why
+the T16 hardware checklist would not catch it.
+
+Options, all needing an owner call:
+
+1. **Wire-format epoch** — add a boot counter (NVS, incremented once per
+   boot) to `cl_beacon_t` and treat a changed epoch as "accept anything".
+   Correct and explicit, but changes `docs/03` and `convoy_proto`, and
+   the beacon has 8 reserved bytes to spend.
+2. **Accept-after-silence in `neighbor_table`** — if an entry has not
+   been heard from in longer than some threshold, accept the next beacon
+   regardless of `seq`. No wire change; needs a threshold picked in
+   `docs/05` and new T04 tests.
+3. **Persist `seq` in NVS** — simplest conceptually, but a flash write
+   every 5 s is unacceptable wear; only viable if written coarsely (e.g.
+   +1000 per boot), which is really option 1 in disguise.
+
+Recommendation: option 2. It is the smallest change, needs no wire-format
+edit, and the staleness tiers already give a natural threshold to reuse.
