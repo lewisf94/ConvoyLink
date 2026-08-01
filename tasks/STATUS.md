@@ -20,7 +20,7 @@ the analog SA818 is a documented licensed-variant appendix (no task).
 | T09 | sx1262 LoRa driver + convoy_pins | — | done | (this commit) | vendored ra01s @f5e0e7a, 4 patches in vendor/NOTICE; LoRaError's infinite-loop default overridden via setjmp so init fails soft. CI can't reach it yet — ci_build_apps.sh is a no-op until T10 adds an app; verified locally against real ESP-IDF v5.3.2 (clean build, 0 warnings) |
 | T10 | bringup_radio app (LoRa ping/RSSI) | T09 | done | (this commit) | first app — ci_build_apps.sh now really builds (also covers T09). Spec's 2/s ping default is 12.2% duty vs docs/03's EU 10% cap, and the same line says respect the budget: EU clamps to 610 ms (~1.64/s) and says so, US/AU unclamped per docs/03. Owner may want the task's default restated as 1.5/s |
 | T11 | gps_uart + bringup_gps app | T03 | done | (this commit) | task's contract says UART2, docs/02 pin table says UART1 (UART0 is the console) — used UART1 per docs-are-law; owner may want T11's comment corrected |
-| T12 | audio_io: I²S mic + speaker | — | todo | | v3: was sa818 |
+| T12 | audio_io: I²S mic + speaker | — | done | (this commit) | v3: was sa818. 32-bit slots BOTH ways, not 16-bit TX: one shared BCLK can't serve two slot widths, so playback rides the top 16 bits (API stays int16). Mic gain left at unity for T21 to tune. CI can't reach it until T13's app |
 | T13 | bringup_audio: I²S/codec bench | T12,T02 | todo | | v3: was bringup_voice |
 | T14 | ili9341_disp + bringup_display app | T09* | todo | | *needs convoy_pins only |
 | T15 | convoylink app skeleton | T09,T12,T14 | todo | | |
