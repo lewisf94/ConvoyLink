@@ -22,7 +22,7 @@ the analog SA818 is a documented licensed-variant appendix (no task).
 | T11 | gps_uart + bringup_gps app | T03 | done | (this commit) | task's contract says UART2, docs/02 pin table says UART1 (UART0 is the console) — used UART1 per docs-are-law; owner may want T11's comment corrected |
 | T12 | audio_io: I²S mic + speaker | — | done | (this commit) | v3: was sa818. 32-bit slots BOTH ways, not 16-bit TX: one shared BCLK can't serve two slot widths, so playback rides the top 16 bits (API stays int16). Mic gain left at unity for T21 to tune. CI can't reach it until T13's app |
 | T13 | bringup_audio: I²S/codec bench | T12,T02 | done | (this commit) | v3: was bringup_voice. `codec` runs the round-trip per 20 ms frame (docs/04 seeding), not bulk, so the preview matches on-air. Recording capped at 5 s / 80 KB static; DIRAM 41.7%, 199 KB free. Also brings T12 under CI |
-| T14 | ili9341_disp + bringup_display app | T09* | todo | | *needs convoy_pins only |
+| T14 | ili9341_disp + bringup_display app | T09* | done | (this commit) | *needs convoy_pins only. M3 complete. NOTE: shared components dir means every app now compiles ili9341_disp, so all 4 apps need the component registry at build time. This sandbox's proxy blocks components.espressif.com, so the managed dep was verified against a signature-matched local stub (all 4 apps clean); the real fetch is CI-gated |
 | T15 | convoylink app skeleton | T09,T12,T14 | todo | | |
 | T16 | radio task: beacons + relay | T04,T10,T15 | todo | | |
 | T17 | radar integration (v0.1 field gate) | T06,T11,T16 | todo | | |

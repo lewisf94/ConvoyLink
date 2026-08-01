@@ -42,10 +42,14 @@ Each bring-up app has a printed checklist for the project owner. Do T09/T10
 first — the LoRa link is the foundation — then T12/T13 (I²S audio), then the
 rest in any order.
 
-**Gate (hardware):** two bench units exchange LoRa pings at ≈ 0 % loss
-across the house with sane RSSI; the I²S mic meters and an ADPCM loopback
-plays back intelligibly; display test pattern at 5 Hz+; GPS fix at a window.
-LoRa walk-test range recorded in STATUS.md.
+All six tasks are **code-complete and CI-green** (T09–T14 done); each app
+ships its owner checklist in its own README.
+
+**Gate (hardware — awaiting the owner and real parts):** two bench units
+exchange LoRa pings at ≈ 0 % loss across the house with sane RSSI; the I²S
+mic meters and an ADPCM loopback plays back intelligibly; display test
+pattern at 5 Hz+; GPS fix at a window. LoRa walk-test range recorded in
+STATUS.md.
 
 ## M4 — Integrated radar firmware `v0.1` (no voice yet)
 

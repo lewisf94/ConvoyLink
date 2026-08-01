@@ -1,0 +1,4 @@
+## The one managed dependency in the firmware (T14): the ILI9341 panel
+## driver, which moved out of ESP-IDF into the component registry.
+dependencies:
+  espressif/esp_lcd_ili9341: "^1"
