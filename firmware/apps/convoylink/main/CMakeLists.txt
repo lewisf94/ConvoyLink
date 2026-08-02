@@ -8,6 +8,6 @@ idf_component_register(SRCS "main.c"
                               "ui_task.c"
                               "ctrl_task.c"
                        INCLUDE_DIRS "."
-                       REQUIRES unit_cfg sx1262 esp_hw_support audio_io gps_uart ili9341_disp
+                       REQUIRES unit_cfg sx1262 esp_hw_support voice_pipe voice_transport audio_io gps_uart ili9341_disp
                                 radar_render neighbor_table convoy_geo
                                 convoy_proto console nvs_flash esp_timer driver)

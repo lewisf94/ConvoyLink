@@ -75,9 +75,14 @@ owner decision to fix.
 > T18 voice_pipe (framing + jitter + conceal, pure C) ·
 > T19 ESP-NOW transport + voice_task + UI
 
-**Gate (field):** PTT voice intelligible between two cars in a tight convoy
-(licence-free ESP-NOW, ~150–400 m); talker's initials show on the radar;
-BUSY/ARMED_WAIT correct when both press; radar keeps updating while talking.
+Both tasks are **code-complete and CI-green** (T18–T19); the checklist is
+in `firmware/apps/convoylink/README.md`.
+
+**Gate (field — awaiting the owner and real parts):** PTT voice
+intelligible between two cars in a tight convoy (licence-free ESP-NOW,
+~150–400 m); talker's initials show on the radar; BUSY/ARMED_WAIT correct
+when both press; radar keeps updating while talking. The range figure
+recorded here is what decides whether T22 is worth building.
 
 ## M6 — Range upgrade + polish `v1.0`
 

@@ -106,7 +106,7 @@ void ctrl_task(void *arg)
                 .type = pressed ? BTN_PTT_DOWN : BTN_PTT_UP,
                 .t_ms = now,
             };
-            ctrl_q_send(&ev);
+            ctrl_q_send(&ev); /* PTT -> voice_task */
             ESP_LOGD(TAG, "PTT %s", pressed ? "down" : "up");
         }
         /* AUX: short press fires on RELEASE, so a long hold can claim the
@@ -114,13 +114,13 @@ void ctrl_task(void *arg)
         if (button_poll(&aux, now, &pressed)) {
             if (!pressed && !aux.hold_fired) {
                 ctrl_event_t ev = {.type = BTN_AUX_PRESS, .t_ms = now};
-                ctrl_q_send(&ev);
+                ui_q_send(&ev); /* AUX -> ui_task */
                 ESP_LOGD(TAG, "AUX short press");
             }
         }
         if (button_hold_elapsed(&aux, now)) {
             ctrl_event_t ev = {.type = BTN_AUX_HOLD, .t_ms = now};
-            ctrl_q_send(&ev);
+            ui_q_send(&ev); /* AUX -> ui_task */
             ESP_LOGD(TAG, "AUX hold");
         }
 

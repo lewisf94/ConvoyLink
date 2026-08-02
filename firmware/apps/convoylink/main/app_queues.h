@@ -36,17 +36,28 @@ typedef struct {
     uint32_t t_ms;
 } ctrl_event_t;
 
-/** Creates both queues. Call once, before any task starts. */
+/** Creates every queue. Call once, before any task starts. */
 esp_err_t queues_init(void);
 
 /** Non-blocking; evicts the oldest item if full. Always succeeds. */
 void tx_q_send(const tx_item_t *item);
 bool tx_q_recv(tx_item_t *out, uint32_t wait_ms);
 
+/*
+ * Button events are split by consumer rather than sharing one queue.
+ * docs/01 draws ctrl_q as feeding both voice_task and ui_task, but a
+ * FreeRTOS queue delivers each item to exactly one reader — two
+ * consumers on one queue would steal each other's events at random.
+ * ctrl_task routes: PTT -> ctrl_q (voice_task), AUX -> ui_q (ui_task).
+ */
 void ctrl_q_send(const ctrl_event_t *ev);
 bool ctrl_q_recv(ctrl_event_t *out, uint32_t wait_ms);
 
+void ui_q_send(const ctrl_event_t *ev);
+bool ui_q_recv(ctrl_event_t *out, uint32_t wait_ms);
+
 /** How many items each queue has evicted since boot. */
-void queues_dropped(uint32_t *tx_dropped, uint32_t *ctrl_dropped);
+void queues_dropped(uint32_t *tx_dropped, uint32_t *ctrl_dropped,
+                    uint32_t *ui_dropped);
 
 #endif /* APP_QUEUES_H */

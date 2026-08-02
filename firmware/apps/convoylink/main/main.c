@@ -22,6 +22,7 @@
 #include "radar_scene.h"
 #include "sx1262.h"
 #include "unit_cfg.h"
+#include "voice_transport.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -56,15 +57,44 @@ static int cmd_free(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    uint32_t tx_dropped, ctrl_dropped;
-    queues_dropped(&tx_dropped, &ctrl_dropped);
+    uint32_t tx_dropped, ctrl_dropped, ui_dropped;
+    queues_dropped(&tx_dropped, &ctrl_dropped, &ui_dropped);
 
     printf("heap free=%u min_free=%u largest_block=%u\n",
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
            (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT),
            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
-    printf("queues dropped: tx=%u ctrl=%u\n", (unsigned)tx_dropped,
-           (unsigned)ctrl_dropped);
+    printf("queues dropped: tx=%u ctrl=%u ui=%u\n", (unsigned)tx_dropped,
+           (unsigned)ctrl_dropped, (unsigned)ui_dropped);
+    return 0;
+}
+
+/* Declared in voice_task.c. */
+void voice_task_stats(const char **transport, int *state,
+                      uint32_t *tx_seconds);
+
+static int cmd_voice(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    const char *transport;
+    int ptt_state;
+    uint32_t tx_seconds, sent, recvd, dropped;
+
+    voice_task_stats(&transport, &ptt_state, &tx_seconds);
+    voice_transport_stats(&sent, &recvd, &dropped);
+
+    static const char *PTT_NAMES[] = {"IDLE", "ARMED_WAIT", "TX", "TX_DRAIN"};
+    convoy_state_t st;
+    state_snapshot(&st);
+
+    printf("transport=%s up=%d ptt=%s talker=%d\n", transport,
+           (int)st.voice_ok,
+           (ptt_state >= 0 && ptt_state < 4) ? PTT_NAMES[ptt_state] : "?",
+           (int)st.voice_talker_uid);
+    printf("tx_seconds=%u frames out=%u in=%u dropped=%u\n",
+           (unsigned)tx_seconds, (unsigned)sent, (unsigned)recvd,
+           (unsigned)dropped);
     return 0;
 }
 
@@ -105,6 +135,9 @@ static void start_console(void)
         {.command = "status",
          .help = "Identity, peripheral health and current fix",
          .func = cmd_status},
+        {.command = "voice",
+         .help = "Voice transport, PTT state, tx-seconds, frame counters",
+         .func = cmd_voice},
     };
     for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++) {
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
@@ -157,8 +190,8 @@ void app_main(void)
     if (!voice_ok) {
         ESP_LOGE(TAG, "VOICE? audio_io init failed");
     }
-    /* The voice transport itself (ESP-NOW or SX1262/Codec2) is T18/T19;
-     * cfg.voice is already carried in state for voice_task to act on. */
+    /* The transport itself is brought up by voice_task, which owns it and
+     * retries every 5 s; aio_init here just proves the I2S side. */
 
     /* --- GPS ------------------------------------------------------------- */
     if (gps_uart_start() != ESP_OK) {

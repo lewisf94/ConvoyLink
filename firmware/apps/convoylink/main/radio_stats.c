@@ -28,8 +28,10 @@ static int cmd_radiostat(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    uint32_t tx_dropped, ctrl_dropped;
-    queues_dropped(&tx_dropped, &ctrl_dropped);
+    uint32_t tx_dropped, ctrl_dropped, ui_dropped;
+    queues_dropped(&tx_dropped, &ctrl_dropped, &ui_dropped);
+    (void)ctrl_dropped;
+    (void)ui_dropped; /* button queues are reported by `free` */
 
     printf("tx=%" PRIu32 " tx_fail=%" PRIu32 " beacon_tx=%" PRIu32
            " beacon_rx=%" PRIu32 "\n",

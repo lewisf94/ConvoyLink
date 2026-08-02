@@ -5,12 +5,10 @@
  * from live state and flushed through the same rr_screen_draw the
  * simulator renders, so what T16/T17 add is data, not drawing.
  *
- * ctrl_q is consumed here for now. docs/01 lists both voice_task and
- * ui_task as consumers of that one queue, which cannot work as written
- * (a single queue delivers each event to exactly one reader) — T15's
- * scope says voice_task ignores control events until T18, so ui_task
- * drains it and handles AUX. Resolving the fan-out is T18's problem and
- * is flagged in STATUS.md.
+ * Button events arrive on ui_q, which carries only the AUX events meant
+ * for this task. docs/01 draws one ctrl_q feeding both voice_task and
+ * ui_task, but a FreeRTOS queue delivers each item to exactly one reader,
+ * so ctrl_task routes instead: PTT to ctrl_q, AUX here (T19).
  */
 #include "app_queues.h"
 #include "app_state.h"
@@ -155,7 +153,7 @@ static void build_scene(const convoy_state_t *st, uint32_t now,
 static void drain_ctrl_events(void)
 {
     ctrl_event_t ev;
-    while (ctrl_q_recv(&ev, 0)) {
+    while (ui_q_recv(&ev, 0)) {
         switch (ev.type) {
         case BTN_AUX_PRESS: {
             /* auto -> 250 -> 500 -> 1k -> 2k -> 4k -> auto (docs/06) */
@@ -176,14 +174,7 @@ static void drain_ctrl_events(void)
             ESP_LOGD(TAG, "backlight -> %u%%", pct);
             break;
         }
-        case BTN_PTT_DOWN:
-        case BTN_PTT_UP:
-            /* Produced by ctrl_task, consumed by voice_task from T18.
-             * Logged here so the button path is observable meanwhile. */
-            ESP_LOGD(TAG, "PTT %s (no consumer until T18)",
-                     ev.type == BTN_PTT_DOWN ? "down" : "up");
-            break;
-        default:
+        default: /* PTT is routed to voice_task, never here */
             break;
         }
     }
