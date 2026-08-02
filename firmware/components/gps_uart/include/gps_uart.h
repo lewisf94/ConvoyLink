@@ -47,4 +47,14 @@ void gps_uart_set_raw_cb(void (*cb)(const char *line));
 /** Sentence counters: recognised-and-merged, and failed-checksum. */
 void gps_uart_stats(uint32_t *ok, uint32_t *bad);
 
+/**
+ * Milliseconds since the last byte of any kind arrived on the GPS UART
+ * (not just a complete or valid sentence), or UINT32_MAX if never. This is
+ * "is the module talking at all" — distinct from `*age_ms` out of
+ * gps_uart_get_fix, which is "when did we last have a *valid* fix" and
+ * can grow for entirely normal reasons (driving into a tunnel). A large
+ * idle time here means the module or wiring itself has gone away (T20).
+ */
+uint32_t gps_uart_idle_ms(void);
+
 #endif /* GPS_UART_H */

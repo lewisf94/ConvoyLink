@@ -403,6 +403,122 @@ TT_TEST(no_fix_scene_hash_pinned)
     TT_ASSERT_EQ(h, 4281412827u);
 }
 
+/* ==================== T20: peripheral-health status states ============== */
+
+static bool status_bar_has_color(const uint16_t *buf, int x0, int x1, int y0,
+                                 int y1, uint16_t color)
+{
+    for (int y = y0; y < y1; y++) {
+        for (int x = x0; x < x1; x++) {
+            if (buf[y * RR_W + x] == color) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+TT_TEST(radio_fault_replaces_sats_and_no_fix)
+{
+    static uint16_t buf[RR_W * RR_H];
+    rr_fb_t fb = {buf, 0, RR_H};
+    rr_scene_t sc;
+
+    /* radio_fault must win over a valid fix: sats (green) suppressed,
+     * RADIO? (red) shown instead, at an even blink phase. */
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.own_fix = true;
+    sc.own_sats = 9;
+    sc.now_ms = 0; /* (0/500) % 2 == 0 -> blink on */
+    sc.rx_talker_uid = -1;
+    sc.radio_fault = true;
+    rr_screen_draw(&fb, &sc);
+    TT_ASSERT(!status_bar_has_color(buf, 0, RR_W, 0, 28, RR_GREEN));
+    TT_ASSERT(status_bar_has_color(buf, 80, 160, 0, 28, RR_RED));
+
+    /* And over NO FIX (no own fix at all): still RADIO?, not NO FIX -
+     * same text either way, but the branch that would print NO FIX must
+     * not also be reached (defensive against a future refactor letting
+     * both branches fire and double-draw). */
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.own_fix = false;
+    sc.now_ms = 0;
+    sc.rx_talker_uid = -1;
+    sc.radio_fault = true;
+    rr_screen_draw(&fb, &sc);
+    TT_ASSERT(status_bar_has_color(buf, 80, 160, 0, 28, RR_RED));
+
+    /* Odd blink phase: RADIO? (like NO FIX) is briefly absent, not stuck
+     * on - proves it shares NO FIX's blink cadence rather than being a
+     * steady tile. */
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.own_fix = true;
+    sc.own_sats = 9;
+    sc.now_ms = 500; /* (500/500) % 2 == 1 -> blink off */
+    sc.rx_talker_uid = -1;
+    sc.radio_fault = true;
+    rr_screen_draw(&fb, &sc);
+    TT_ASSERT(!status_bar_has_color(buf, 80, 160, 0, 28, RR_RED));
+    TT_ASSERT(!status_bar_has_color(buf, 0, RR_W, 0, 28, RR_GREEN));
+}
+
+TT_TEST(voice_fault_replaces_tx_and_rx)
+{
+    static uint16_t buf[RR_W * RR_H];
+    rr_fb_t fb = {buf, 0, RR_H};
+    rr_scene_t sc;
+
+    /* voice_fault must win over ptt_tx: the TX tile (a filled red rect
+     * with white "TX" text) must not appear - only red VOICE? text does,
+     * so no white pixels should exist in the right-hand zone at all. */
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.rx_talker_uid = -1;
+    sc.ptt_tx = true;
+    sc.voice_fault = true;
+    rr_screen_draw(&fb, &sc);
+    TT_ASSERT(!status_bar_has_color(buf, 180, RR_W, 0, 28, RR_WHITE));
+    TT_ASSERT(status_bar_has_color(buf, 180, RR_W, 0, 28, RR_RED));
+
+    /* voice_fault must win over an active RX indicator too (normally
+     * green "<XX"). */
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.rx_talker_uid = 1;
+    sc.n_neighbors = 1;
+    sc.neighbors[0] = mk_entry(1, "AM", 515000000, 0, 3, 0);
+    sc.voice_fault = true;
+    rr_screen_draw(&fb, &sc);
+    TT_ASSERT(!status_bar_has_color(buf, 180, RR_W, 0, 28, RR_GREEN));
+    TT_ASSERT(status_bar_has_color(buf, 180, RR_W, 0, 28, RR_RED));
+}
+
+TT_TEST(gps_silent_sats_shown_red_not_green)
+{
+    static uint16_t buf[RR_W * RR_H];
+    rr_fb_t fb = {buf, 0, RR_H};
+    rr_scene_t sc;
+
+    memset(&sc, 0, sizeof(sc));
+    sc.provisioned = true;
+    sc.own_fix = true;
+    sc.own_sats = 9;
+    sc.rx_talker_uid = -1;
+    sc.gps_silent = true;
+    rr_screen_draw(&fb, &sc);
+    TT_ASSERT(!status_bar_has_color(buf, 0, RR_W, 0, 28, RR_GREEN));
+    TT_ASSERT(status_bar_has_color(buf, 80, 160, 0, 28, RR_RED));
+
+    /* Same fix, silence cleared: back to green, no red anywhere. */
+    sc.gps_silent = false;
+    rr_screen_draw(&fb, &sc);
+    TT_ASSERT(status_bar_has_color(buf, 0, RR_W, 0, 28, RR_GREEN));
+    TT_ASSERT(!status_bar_has_color(buf, 0, RR_W, 0, 28, RR_RED));
+}
+
 TT_TEST(waiting_scene_hash_pinned)
 {
     rr_scene_t sc;
@@ -446,6 +562,9 @@ int main(void)
     TT_RUN(offscale_arrowhead_no_dot_beyond_ring);
     TT_RUN(pick_zoom_fixtures);
     TT_RUN(no_fix_scene_hash_pinned);
+    TT_RUN(radio_fault_replaces_sats_and_no_fix);
+    TT_RUN(voice_fault_replaces_tx_and_rx);
+    TT_RUN(gps_silent_sats_shown_red_not_green);
     TT_RUN(waiting_scene_hash_pinned);
     return tt_summary("radar_render");
 }

@@ -48,4 +48,16 @@ const char *unit_cfg_voice_name(cfg_voice_t v);
  */
 esp_err_t unit_cfg_register_console(void);
 
+/**
+ * Night-mode backlight level, 0-100 (T20: "no auto-dim in v1 - persist
+ * choice only"). Unlike identity/region/voice above, this takes effect
+ * immediately on the running unit (`ui_task` applies it live on every
+ * AUX-hold) and is only ever *read* again at the next boot, so there is
+ * no "reboot to apply" step for it.
+ */
+esp_err_t unit_cfg_set_backlight_pct(uint8_t pct);
+
+/** Defaults to 100 (full brightness) if never set. */
+uint8_t unit_cfg_get_backlight_pct(void);
+
 #endif /* UNIT_CFG_H */

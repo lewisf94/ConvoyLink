@@ -1,9 +1,9 @@
 # convoylink — the real firmware
 
-The integrated app all five units run. T15 builds its frame: FreeRTOS
-task layout, shared state, queues, NVS identity and the console. Task
-bodies are stubs that T16–T18 fill in — it boots, breathes, renders, and
-transmits nothing yet.
+The integrated app all five units run: FreeRTOS task layout, shared
+state, queues, NVS identity/console (T15), real beacons/relay (T16), real
+radar (T17), real voice (T18/T19), and the road-trip-ready polish —
+boot splash, night mode, watchdog coverage, fault tiles (T20).
 
 ## Build & flash
 
@@ -12,6 +12,14 @@ transmits nothing yet.
 idf.py -C firmware/apps/convoylink set-target esp32s3 build
 idf.py -C firmware/apps/convoylink -p /dev/ttyUSB0 flash monitor
 ```
+
+## Boot sequence
+
+Every boot shows a 1.5 s splash — `ConvoyLink`, your identity (or
+`UNPROVISIONED`), and the firmware version (`git describe`, embedded by
+the build system — no separate versioning step needed) — before the radar
+takes over. If the previous boot ended in a watchdog reset, a banner
+about it prints to the log first, before anything else.
 
 ## Provisioning (once per device)
 
@@ -38,14 +46,15 @@ them means they cannot hear each other (`docs/07`).
 | `free` | Heap free / min-free / largest block, plus queue drop counts |
 | `radiostat` | LoRa counters: tx/rx/invalid/relayed/suppressed/dropped |
 | `nt` | Neighbour table: seq, age, tier, distance, direct/via_relay |
-| `voice` | Transport, PTT state, tx-seconds, frame counters |
+| `voice` | Transport, PTT state, tx-seconds, frame counters (in/out/dropped/**invalid**) |
+| `crash` | **Debug only** — deliberately hangs `ui_task` to test the watchdog + reset-reason banner on demand, without needing a real fault |
 
 ## Buttons
 
 | Input | Action |
 |---|---|
 | AUX short press | Cycle zoom: auto → 250 m → 500 m → 1 km → 2 km → 4 km → auto |
-| AUX 2 s hold | Cycle backlight: 100 % → 60 % → 25 % |
+| AUX 2 s hold | Cycle backlight: 100 % → 60 % → 25 %, **persisted to NVS** and re-applied on every boot (no auto-dim — v1 remembers your last choice only) |
 | PTT hold | Talk. Busy channel → BUSY, and you get it when the other unit releases |
 
 ## Tasks
@@ -53,7 +62,7 @@ them means they cannot hear each other (`docs/07`).
 Names, cores and priorities are transcribed from `docs/01`'s table and
 live in `app_tasks.h`:
 
-| Task | Core | Prio | T15 state |
+| Task | Core | Prio | Status |
 |---|---|---|---|
 | `radio_task` | 1 | 12 | Real: RX dispatch, single-hop relay with suppression, LBT |
 | `voice_task` | 1 | 8 | Real: PTT state machine, ESP-NOW transport, jitter playback |
@@ -61,17 +70,52 @@ live in `app_tasks.h`:
 | `ctrl_task` | 0 | 5 | Real: 50 ms debounce, AUX short vs 2 s hold |
 | `ui_task` | 0 | 4 | Real: renders the scene at 5 Hz through `rr_screen_draw` |
 
-Set `log_level` to DEBUG to see all five heartbeats.
+Set `log_level` to DEBUG to see all five heartbeats. `radio_task`,
+`voice_task` and `ui_task` are subscribed to the 10 s task watchdog
+(`sdkconfig.defaults`); a task that stops looping trips it, resets the
+unit, and the reset-reason banner above tells you which kind of watchdog
+fired on the next boot. `gps_task` and `ctrl_task` aren't subscribed —
+both only ever block on bounded reads/timeouts, so a hang there would
+mean the underlying driver itself has stopped responding, which is a
+different failure to chase than "this task's own loop got stuck".
+
+## Fault tiles (docs/01 §Error-handling)
+
+A failed peripheral never halts boot or disturbs the radar — it shows a
+red tile instead, and the owning task keeps retrying every 5 s:
+
+| Tile | Where | Meaning |
+|---|---|---|
+| `RADIO?` | Status bar centre, blinking (same slot/cadence as `NO FIX`) | SX1262 init failed — positions and relay are down; retries every 5 s |
+| `VOICE?` | Status bar right (replaces TX/RX — a faulted transport can't do either) | `audio_io` or the voice transport failed to init; retries every 5 s |
+| Sats shown **red**, not green | Status bar centre | GPS UART has produced **no byte at all** for > 10 s — the module itself looks dead, distinct from an ordinary "no fix yet" (which still shows `NO FIX`, not red sats) |
+
+`docs/06` predates these three states and doesn't lay out their exact
+pixel geometry; the placements above were chosen to reuse existing
+status-bar patterns rather than invent new ones (see the comment at the
+top of `radar_scene.h`).
 
 ## Acceptance — hardware checklist (project owner)
 
-- [ ] Fresh flash boots to the **PROVISION ME** screen. `unitcfg set 0 LF`,
-      reboot → the status bar shows `U0 LF`.
+- [ ] Fresh flash boots: splash (`ConvoyLink`, identity, version) for
+      ~1.5 s, then the **PROVISION ME** screen. `unitcfg set 0 LF`,
+      reboot → splash shows `U0 LF`, then the status bar does too.
+- [ ] Cold boot to a usable radar in < 5 s, excluding GPS lock.
 - [ ] All five task heartbeats appear at DEBUG log level.
 - [ ] The radar area renders the "waiting for convoy…" state at 5 Hz —
       watch for flicker, which would mean strip flushing is struggling.
-- [ ] 10-minute idle soak: no watchdog resets, and `free` shows a stable
-      heap high-water mark.
+- [ ] Run `crash`: expect a reset within ~10 s, then a watchdog
+      reset-reason banner at the top of the next boot's log.
+- [ ] Disconnect the SX1262 mid-run (or short/remove its NSS or BUSY
+      line): `RADIO?` appears, the unit keeps rendering, and reconnecting
+      recovers within 5 s with **no reboot**.
+- [ ] Unplug the I²S mic or amp: `VOICE?` appears, radar unaffected,
+      recovers the same way once replugged.
+- [ ] Cover the GPS antenna or unplug it: sats turn **red** after ~10 s of
+      silence (not simply `NO FIX`, which is the no-fix-yet state).
+- [ ] Set a night level, power-cycle: it comes back exactly as left.
+- [ ] 2-hour bench soak with a second unit beaconing and periodic PTT:
+      zero resets, `radiostat`/`free` drop counters ≈ 0, heap stable.
 
 ## Field checklist — the M4 gate (project owner)
 

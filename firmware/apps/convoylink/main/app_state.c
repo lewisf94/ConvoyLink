@@ -22,6 +22,7 @@ esp_err_t state_init(const unit_cfg_t *cfg, bool provisioned)
     s_state.cfg = *cfg;
     s_state.provisioned = provisioned;
     s_state.own_fix_age_ms = UINT32_MAX;
+    s_state.gps_idle_ms = UINT32_MAX;
     s_state.voice_status = VOICE_IDLE;
     s_state.voice_talker_uid = -1;
     s_state.zoom_mode = RR_ZOOM_AUTO;

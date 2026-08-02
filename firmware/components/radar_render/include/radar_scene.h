@@ -10,6 +10,14 @@
  * docs/06 uses two non-ASCII glyphs): the satellite-count marker "<n>◦"
  * is rendered "<n>o"; the "waiting for convoy…" ellipsis is rendered as
  * three literal periods. Documented once here, not repeated per call site.
+ *
+ * RADIO?/VOICE? tiles (radio_fault/voice_fault) are mandated by docs/01
+ * §Error-handling but not laid out by docs/06, which predates them; T20
+ * places them by extending the two existing status-bar patterns rather
+ * than inventing new geometry: RADIO? reuses NO FIX's exact position/
+ * blink in the centre zone (same severity register: the position system
+ * is unusable), VOICE? reuses the existing right-hand voice-state zone
+ * (mutually exclusive with TX/RX — a faulted transport can't do either).
  */
 #ifndef RADAR_SCENE_H
 #define RADAR_SCENE_H
@@ -38,6 +46,7 @@ typedef struct {
     int32_t own_lat_e7, own_lon_e7;
     uint16_t own_course_cdeg; /* CL_COURSE_INVALID -> circle marker     */
     uint8_t own_sats;
+    bool gps_silent; /* true -> sats count shown red, not green (T20)  */
     /* convoy */
     nt_entry_t neighbors[CL_MAX_UNITS];
     int n_neighbors; /* from nt_snapshot                                */
@@ -47,6 +56,9 @@ typedef struct {
     int8_t rx_talker_uid;  /* -1 none; else digital voice sender uid    */
     rr_zoom_t zoom_mode;
     uint16_t zoom_scale_m; /* resolved scale actually in use            */
+    /* peripheral health (docs/01 §Error-handling, T20) */
+    bool radio_fault; /* SX1262 init failed -> RADIO? tile, blinking    */
+    bool voice_fault; /* audio_io/transport init failed -> VOICE? tile  */
 } rr_scene_t;
 
 /** Render the full screen state into one strip. Pure function of scene. */

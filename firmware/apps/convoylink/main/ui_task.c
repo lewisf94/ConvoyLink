@@ -13,9 +13,11 @@
 #include "app_queues.h"
 #include "app_state.h"
 #include "app_tasks.h"
+#include "unit_cfg.h"
 
 #include "convoy_geo.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -29,6 +31,12 @@ static const char *TAG = "ui_task";
 #define UI_TICK_MS 200 /* 5 Hz, docs/01 */
 #define STRIP_H 20     /* docs/06 rendering contract */
 #define STRIPS (RR_H / STRIP_H)
+
+/* docs/01 §Error-handling: GPS-module liveness is separate from fix
+ * validity (a real fix can go stale for entirely normal reasons, like
+ * driving into a tunnel); this is specifically "has the module stopped
+ * talking at all" (T20). */
+#define GPS_SILENT_MS 10000
 
 /* docs/06: auto-zoom changes at most every 2 s. rr_pick_zoom already
  * encodes the 90 %-of-scale rule, so this only rate-limits it. */
@@ -54,6 +62,16 @@ static uint16_t s_held_course = CL_COURSE_INVALID;
 static uint32_t s_held_course_ms;
 
 static uint8_t s_backlight_idx;
+
+/* Debug-only: set by main.c's hidden `crash` console command to prove the
+ * watchdog banner path end to end on real hardware (T20 acceptance).
+ * REMOVE-ME if this ever needs to leave the firmware for a public build. */
+static volatile bool s_crash_requested;
+
+void ui_task_trigger_crash(void)
+{
+    s_crash_requested = true;
+}
 
 /*
  * docs/05: the arrow follows live course above 1.5 m/s; below that it
@@ -114,6 +132,11 @@ static void build_scene(const convoy_state_t *st, uint32_t now,
     sc->own_lon_e7 = st->own_fix.lon_e7;
     sc->own_course_cdeg = resolve_own_course(&st->own_fix, now);
     sc->own_sats = st->own_fix.sats;
+    sc->gps_silent =
+        st->gps_idle_ms != UINT32_MAX && st->gps_idle_ms >= GPS_SILENT_MS;
+
+    sc->radio_fault = !st->radio_ok;
+    sc->voice_fault = !st->voice_ok;
 
     sc->now_ms = now;
     sc->n_neighbors = nt_snapshot(&st->neighbors, sc->neighbors, now);
@@ -171,7 +194,11 @@ static void drain_ctrl_events(void)
                                          sizeof BACKLIGHT_STEPS[0]));
             uint8_t pct = BACKLIGHT_STEPS[s_backlight_idx];
             (void)disp_backlight_pct(pct);
-            ESP_LOGD(TAG, "backlight -> %u%%", pct);
+            /* Persist the choice (T20: "no auto-dim in v1 - persist choice
+             * only"); NVS write is cheap here since it only happens on a
+             * deliberate 2 s hold, not a hot path. */
+            (void)unit_cfg_set_backlight_pct(pct);
+            ESP_LOGD(TAG, "backlight -> %u%% (saved)", pct);
             break;
         }
         default: /* PTT is routed to voice_task, never here */
@@ -183,11 +210,37 @@ static void drain_ctrl_events(void)
 void ui_task(void *arg)
 {
     (void)arg;
+    esp_task_wdt_add(NULL); /* 10 s window from sdkconfig.defaults (T20) */
+
+    /* Apply the night-mode level chosen before the last reboot. Index is
+     * recovered by matching the stored percentage back into
+     * BACKLIGHT_STEPS rather than storing the index itself, so the two
+     * stay in sync even if BACKLIGHT_STEPS is ever reordered. */
+    uint8_t saved_pct = unit_cfg_get_backlight_pct();
+    for (size_t i = 0; i < sizeof BACKLIGHT_STEPS / sizeof BACKLIGHT_STEPS[0];
+        i++) {
+        if (BACKLIGHT_STEPS[i] == saved_pct) {
+            s_backlight_idx = (uint8_t)i;
+            break;
+        }
+    }
+    (void)disp_backlight_pct(saved_pct);
+
     TickType_t last_wake = xTaskGetTickCount();
     uint32_t last_beat = 0;
     uint32_t frames = 0;
 
     for (;;) {
+        esp_task_wdt_reset();
+
+        if (s_crash_requested) {
+            ESP_LOGW(TAG, "crash: spinning ui_task to force a task-WDT "
+                          "reset (debug only, requested via console)");
+            for (;;) {
+                /* deliberately no esp_task_wdt_reset() and no yield */
+            }
+        }
+
         drain_ctrl_events();
 
         convoy_state_t st;

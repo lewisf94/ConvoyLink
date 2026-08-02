@@ -11,9 +11,11 @@
 #include "radio_stats.h"
 
 #include "audio_io.h"
+#include "esp_app_desc.h"
 #include "esp_console.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "gps_uart.h"
@@ -29,8 +31,74 @@
 
 static const char *TAG = "convoylink";
 
-/* Splash: draw the provision/waiting screen once before the tasks start,
- * so a slow radio or GPS init never looks like a dead device. */
+#define BOOT_SPLASH_MS 1500 /* T20: project name/id/version, then radar */
+
+/*
+ * If the last boot ended in a task/interrupt watchdog reset, make that the
+ * first thing visible in the log - it means some task stopped responding,
+ * which is worth the owner's attention before anything else prints
+ * (T20 acceptance: "reset-reason banner appears after a deliberate WDT
+ * trip"). Ordinary resets (power-on, esp_restart, panic) print nothing
+ * extra here.
+ */
+static void log_reset_reason_banner(void)
+{
+    esp_reset_reason_t reason = esp_reset_reason();
+    const char *name;
+    switch (reason) {
+    case ESP_RST_TASK_WDT:
+        name = "TASK watchdog";
+        break;
+    case ESP_RST_INT_WDT:
+        name = "INTERRUPT watchdog";
+        break;
+    case ESP_RST_WDT:
+        name = "watchdog (other)";
+        break;
+    default:
+        return;
+    }
+    ESP_LOGW(TAG, "############################################");
+    ESP_LOGW(TAG, "# LAST RESET WAS A WATCHDOG TIMEOUT: %s", name);
+    ESP_LOGW(TAG, "# a task stopped responding to its watchdog - check the");
+    ESP_LOGW(TAG, "# logs from just before this boot for which one (T20)");
+    ESP_LOGW(TAG, "############################################");
+}
+
+/* Splash 1/2: project name, identity, firmware version (`git describe`,
+ * via IDF's PROJECT_VER machinery — esp_app_desc.h needs no extra CMake
+ * work). Held a fixed 1.5 s so it's readable, then splash 2/2 below takes
+ * over. */
+static void draw_boot_splash(const unit_cfg_t *cfg, bool provisioned)
+{
+    const esp_app_desc_t *desc = esp_app_get_description();
+    char id_buf[20], ver_buf[40];
+    if (provisioned) {
+        snprintf(id_buf, sizeof id_buf, "U%u %c%c", (unsigned)cfg->unit_id,
+                 cfg->initials[0], cfg->initials[1]);
+    } else {
+        snprintf(id_buf, sizeof id_buf, "UNPROVISIONED");
+    }
+    snprintf(ver_buf, sizeof ver_buf, "fw %s", desc->version);
+
+    const char *title = "ConvoyLink";
+    static uint16_t strip[RR_W * 20];
+    for (int y0 = 0; y0 < RR_H; y0 += 20) {
+        rr_fb_t fb = {strip, y0, 20};
+        rr_clear(&fb, RR_BG);
+        rr_text(&fb, (RR_W - 16 * (int)strlen(title)) / 2, 130, title,
+                RR_WHITE, 2);
+        rr_text(&fb, (RR_W - 16 * (int)strlen(id_buf)) / 2, 160, id_buf,
+                RR_TEXT, 2);
+        rr_text(&fb, (RR_W - 8 * (int)strlen(ver_buf)) / 2, 290, ver_buf,
+                RR_TEXT, 1);
+        (void)disp_flush(fb.y0, fb.h, strip);
+    }
+    vTaskDelay(pdMS_TO_TICKS(BOOT_SPLASH_MS));
+}
+
+/* Splash 2/2: draw the provision/waiting screen once before the tasks
+ * start, so a slow radio or GPS init never looks like a dead device. */
 static uint16_t s_splash_strip[RR_W * 20];
 
 static void draw_splash(const unit_cfg_t *cfg, bool provisioned)
@@ -71,7 +139,7 @@ static int cmd_free(int argc, char **argv)
 
 /* Declared in voice_task.c. */
 void voice_task_stats(const char **transport, int *state,
-                      uint32_t *tx_seconds);
+                      uint32_t *tx_seconds, uint32_t *frame_invalid);
 
 static int cmd_voice(int argc, char **argv)
 {
@@ -79,9 +147,9 @@ static int cmd_voice(int argc, char **argv)
     (void)argv;
     const char *transport;
     int ptt_state;
-    uint32_t tx_seconds, sent, recvd, dropped;
+    uint32_t tx_seconds, frame_invalid, sent, recvd, dropped;
 
-    voice_task_stats(&transport, &ptt_state, &tx_seconds);
+    voice_task_stats(&transport, &ptt_state, &tx_seconds, &frame_invalid);
     voice_transport_stats(&sent, &recvd, &dropped);
 
     static const char *PTT_NAMES[] = {"IDLE", "ARMED_WAIT", "TX", "TX_DRAIN"};
@@ -92,9 +160,25 @@ static int cmd_voice(int argc, char **argv)
            (int)st.voice_ok,
            (ptt_state >= 0 && ptt_state < 4) ? PTT_NAMES[ptt_state] : "?",
            (int)st.voice_talker_uid);
-    printf("tx_seconds=%u frames out=%u in=%u dropped=%u\n",
+    printf("tx_seconds=%u frames out=%u in=%u dropped=%u invalid=%u\n",
            (unsigned)tx_seconds, (unsigned)sent, (unsigned)recvd,
-           (unsigned)dropped);
+           (unsigned)dropped, (unsigned)frame_invalid);
+    return 0;
+}
+
+/* Declared in ui_task.c. Debug-only aid so the WDT/reset-reason path can
+ * be exercised on real hardware without a genuine fault (T20 acceptance:
+ * "add a hidden crash console cmd"). REMOVE-ME if this firmware ever
+ * needs to leave the owner's hands with debug commands still live. */
+void ui_task_trigger_crash(void);
+
+static int cmd_crash(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    printf("triggering a deliberate ui_task hang - expect a task-WDT reset "
+           "within ~10 s and a banner on the next boot\n");
+    ui_task_trigger_crash();
     return 0;
 }
 
@@ -138,6 +222,10 @@ static void start_console(void)
         {.command = "voice",
          .help = "Voice transport, PTT state, tx-seconds, frame counters",
          .func = cmd_voice},
+        {.command = "crash",
+         .help = "Debug only: deliberately hang ui_task to test the "
+                 "watchdog/reset-reason path",
+         .func = cmd_crash},
     };
     for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++) {
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
@@ -147,6 +235,8 @@ static void start_console(void)
 
 void app_main(void)
 {
+    log_reset_reason_banner(); /* first thing printed, before anything else */
+
     /* --- NVS + identity ------------------------------------------------- */
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
@@ -174,6 +264,7 @@ void app_main(void)
 
     /* --- display + splash ------------------------------------------------ */
     if (disp_init() == ESP_OK) {
+        draw_boot_splash(&cfg, provisioned);
         draw_splash(&cfg, provisioned);
     } else {
         ESP_LOGE(TAG, "display init failed — running headless");

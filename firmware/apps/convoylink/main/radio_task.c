@@ -16,6 +16,7 @@
 
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -181,9 +182,12 @@ static void handle_rx(const uint8_t *buf, int16_t rssi, int8_t snr,
 void radio_task(void *arg)
 {
     (void)arg;
+    esp_task_wdt_add(NULL); /* 10 s window from sdkconfig.defaults (T20) */
     uint32_t last_beat = 0, last_retry = 0;
 
     for (;;) {
+        esp_task_wdt_reset();
+
         convoy_state_t st;
         state_snapshot(&st);
 

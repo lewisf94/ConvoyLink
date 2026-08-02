@@ -74,6 +74,7 @@ void gps_task(void *arg)
         convoy_state_t *stp = state_get();
         stp->own_fix = fix;
         stp->own_fix_age_ms = age_ms;
+        stp->gps_idle_ms = gps_uart_idle_ms();
         state_unlock();
 
         convoy_state_t st;

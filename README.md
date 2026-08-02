@@ -40,20 +40,35 @@ the ignition. Up to 5 cars.
 |---|---|
 | `docs/00…09` | Design docs — architecture, wiring, radio protocol, voice, geo, UI, dev guide. **Start at `docs/00-brief.md`**; `docs/09-decisions.md` is the what-was-chosen-and-why record |
 | `ROADMAP.md` | Milestones M1–M6 with gates |
-| `tasks/` | The implementation queue: 21 self-contained task specs with interface contracts + acceptance tests, designed for execution by AI coding agents (`CLAUDE.md` holds the standing rules). `tasks/STATUS.md` is the live board |
+| `tasks/` | The implementation queue: 22 self-contained task specs with interface contracts + acceptance tests, designed for execution by AI coding agents (`CLAUDE.md` holds the standing rules). `tasks/STATUS.md` is the live board |
 | `firmware/` | ESP-IDF components + apps (`convoylink` + per-subsystem `bringup_*` test firmwares) |
-| `test/host/` | gcc/ASan unit tests for the pure-C core (protocol, geo, parser, renderer) — no hardware needed |
-| `sim/` | SDL2 desktop simulator: the real radar code fed by scripted GPS scenarios (arrives in T07) |
+| `test/host/` | gcc/ASan unit tests for the pure-C core (protocol, geo, parser, renderer, voice framing/jitter) — no hardware needed |
+| `sim/` | SDL2 desktop simulator: the real radar code fed by scripted GPS scenarios, with scripted `--check` behaviour assertions |
 
-## Status
+## Status — `v1.0-rc`, everything through M6/T20 is code-complete and CI-green
 
-Scaffold complete on the **v3 architecture** (ESP32-S3; LoRa positions +
-digital transport-abstracted voice — see the decision log in
-`docs/00-brief.md` for the NRF24→two-radio→digital-voice evolution and the
-corrected UK legality analysis): docs, task queue, CI, and the
-`convoy_proto` wire-format component (host-tested, 9/9). Implementation
-proceeds through `tasks/STATUS.md` — milestone M1 (pure-C libraries) is
-next. New hardware to order per unit: an SX1262 LoRa module, an INMP441 I²S
+All software milestones are done: **M1** pure-C libraries, **M2** desktop
+simulator, **M3** drivers + bring-up apps, **M4** integrated radar
+firmware, **M5** digital PTT voice (ESP-NOW), and **M6**'s `convoylink`
+polish (T20 — boot splash, night mode, watchdog coverage, fault tiles).
+`make -C test/host test` is 66/66; `./tools/ci_build_apps.sh` builds all
+five firmware apps clean.
+
+What's left is genuinely hardware-shaped, not more code:
+
+- **M3/M4/M5 hardware gates** — LoRa bench test, a two-car drive, a
+  two-unit voice test — are the project owner's to run with real parts.
+  Each `bringup_*` app and `convoylink` itself ships its checklist in its
+  own README; results (range, latency, tuning numbers) get recorded in
+  `tasks/STATUS.md`.
+- **T21** (field guide + tuning pass) needs those results — mic gain,
+  auto-zoom behaviour, the numbers that only a bench and a drive can
+  supply.
+- **T22** (SX1262/Codec2 voice, a range upgrade) is optional for v1.0; the
+  ESP-NOW voice range measured in the M5 gate decides whether it's worth
+  building.
+
+New hardware to order per unit: an SX1262 LoRa module, an INMP441 I²S
 mic, a MAX98357A I²S amp, and a LoRa whip (~£20–25/unit — `docs/00`
 §Hardware). Voice's default transport (ESP-NOW) needs no extra radio.
 

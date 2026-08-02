@@ -32,6 +32,7 @@ typedef struct {
     /* own position */
     nmea_fix_t own_fix;
     uint32_t own_fix_age_ms; /* UINT32_MAX = never fixed */
+    uint32_t gps_idle_ms;    /* since any byte at all; UINT32_MAX = never */
 
     /* convoy */
     nt_t neighbors;

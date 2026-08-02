@@ -79,16 +79,30 @@ static void draw_status_bar(rr_fb_t *fb, const rr_scene_t *sc)
              sc->self_initials[0], sc->self_initials[1]);
     rr_text(fb, 4, 6, buf, RR_WHITE, 2);
 
-    if (sc->own_fix) {
+    if (sc->radio_fault) {
+        /* Same position/blink as NO FIX: the position system is unusable
+         * either way, and this is the centre zone's existing "attention"
+         * pattern (docs/01 §Error-handling; not laid out in docs/06). */
+        if (((sc->now_ms / 500u) % 2u) == 0u) {
+            const char *rf = "RADIO?";
+            rr_text(fb, CX - 8 * (int)strlen(rf) / 2, 9, rf, RR_RED, 1);
+        }
+    } else if (sc->own_fix) {
         snprintf(buf, sizeof buf, "%uo", (unsigned)sc->own_sats);
         int w = 16 * (int)strlen(buf);
-        rr_text(fb, CX - w / 2, 6, buf, RR_GREEN, 2);
+        rr_text(fb, CX - w / 2, 6, buf, sc->gps_silent ? RR_RED : RR_GREEN, 2);
     } else if (((sc->now_ms / 500u) % 2u) == 0u) {
         const char *nf = "NO FIX";
         rr_text(fb, CX - 8 * (int)strlen(nf) / 2, 9, nf, RR_RED, 1);
     }
 
-    if (sc->ptt_tx) {
+    if (sc->voice_fault) {
+        /* Right-hand voice-state zone (docs/06 x>=180): a faulted
+         * transport can't be TXing or RXing, so this simply replaces
+         * those states rather than competing with them (T20). */
+        const char *vf = "VOICE?";
+        rr_text(fb, RR_W - 4 - 8 * (int)strlen(vf), 7, vf, RR_RED, 1);
+    } else if (sc->ptt_tx) {
         rr_fill_rect(fb, 198, 4, 38, 20, RR_RED);
         rr_text(fb, 198 + (38 - 16) / 2, 7, "TX", RR_WHITE, 2);
     } else if (sc->rx_talker_uid >= 0) {

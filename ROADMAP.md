@@ -89,6 +89,16 @@ recorded here is what decides whether T22 is worth building.
 > brightness) · T21 five-unit field guide + tuning pass ·
 > T22 SX1262/Codec2 voice transport + A/B vs ESP-NOW (experimental)
 
+T20 is **code-complete and CI-green**: boot splash with the firmware
+version, NVS-persisted night mode, task-watchdog coverage on radio/voice/
+ui with a reset-reason boot banner and a hidden `crash` test command, and
+the `RADIO?`/`VOICE?`/GPS-silent fault tiles docs/01 asks for. Checklist
+is in `firmware/apps/convoylink/README.md`.
+
+T21 is genuinely a hardware-tuning pass (mic gain, LoRa/ESP-NOW range,
+whether auto-zoom flaps in the field) — it needs bench and drive time,
+not more code, so it waits on the M3/M4/M5 gates below.
+
 **Gate:** the 5-car success criteria in `docs/00-brief.md`. T22 is optional
 for v1.0 — ship on ESP-NOW if the field A/B isn't done; the winner of the
 A/B becomes the documented default voice transport.

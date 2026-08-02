@@ -38,6 +38,13 @@ static uint32_t s_last_valid_ms;
 static bool s_ever_valid;
 static uint32_t s_ok, s_bad;
 
+/* Single-writer (reader_task), diagnostic-only: tolerant of a torn read,
+ * same convention as radio_stats' counters. Updated on ANY byte, not just
+ * a complete sentence - this is "is the module alive", not "is the fix
+ * good" (docs/01 GPS-silent handling, T20). */
+static volatile uint32_t s_last_byte_ms;
+static volatile bool s_ever_byte;
+
 static SemaphoreHandle_t s_lock;
 static TaskHandle_t s_reader;
 static void (*volatile s_raw_cb)(const char *line);
@@ -103,6 +110,8 @@ static void reader_task(void *arg)
         if (n <= 0) {
             continue;
         }
+        s_last_byte_ms = now_ms();
+        s_ever_byte = true;
         for (int i = 0; i < n; i++) {
             char c = (char)buf[i];
             raw_feed(c);
@@ -135,6 +144,7 @@ esp_err_t gps_uart_start(void)
     nmea_init(&s_parser);
     memset(&s_fix, 0, sizeof s_fix);
     s_ever_valid = false;
+    s_ever_byte = false;
     s_ok = s_bad = 0;
 
     const uart_config_t cfg = {
@@ -206,6 +216,14 @@ bool gps_uart_get_fix(nmea_fix_t *out, uint32_t *age_ms)
 void gps_uart_set_raw_cb(void (*cb)(const char *line))
 {
     s_raw_cb = cb;
+}
+
+uint32_t gps_uart_idle_ms(void)
+{
+    if (!s_ever_byte) {
+        return UINT32_MAX;
+    }
+    return (uint32_t)(int32_t)(now_ms() - s_last_byte_ms);
 }
 
 void gps_uart_stats(uint32_t *ok, uint32_t *bad)

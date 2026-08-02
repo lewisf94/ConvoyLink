@@ -20,6 +20,9 @@ static const char *TAG = "unit_cfg";
 #define KEY_INITIALS "initials"
 #define KEY_REGION "region"
 #define KEY_VOICE "voice"
+#define KEY_BACKLIGHT "backlight"
+
+#define BACKLIGHT_PCT_DEFAULT 100u
 
 static nvs_handle_t s_nvs;
 static bool s_open;
@@ -102,6 +105,34 @@ bool unit_cfg_get(unit_cfg_t *out)
         *out = cfg;
     }
     return provisioned;
+}
+
+esp_err_t unit_cfg_set_backlight_pct(uint8_t pct)
+{
+    if (!s_open) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (pct > 100) {
+        pct = 100;
+    }
+    esp_err_t err = nvs_set_u8(s_nvs, KEY_BACKLIGHT, pct);
+    if (err == ESP_OK) {
+        err = nvs_commit(s_nvs);
+    }
+    return err;
+}
+
+uint8_t unit_cfg_get_backlight_pct(void)
+{
+    uint8_t pct = BACKLIGHT_PCT_DEFAULT;
+    if (s_open) {
+        uint8_t stored;
+        if (nvs_get_u8(s_nvs, KEY_BACKLIGHT, &stored) == ESP_OK &&
+            stored <= 100) {
+            pct = stored;
+        }
+    }
+    return pct;
 }
 
 /* ---- console ------------------------------------------------------------ */

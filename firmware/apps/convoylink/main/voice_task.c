@@ -18,6 +18,7 @@
 
 #include "audio_io.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -45,6 +46,7 @@ static vp_rx_t s_rx;
 static ptt_state_t s_ptt;
 static uint32_t s_tx_started_ms;
 static uint32_t s_tx_seconds;
+static uint32_t s_frame_invalid; /* corrupt/foreign RX frames (T20) */
 static bool s_ptt_held;
 
 static uint32_t now_ms(void)
@@ -160,6 +162,13 @@ static void pump_rx(bool transmitting)
     uint8_t frame[VF_FRAME_MAX];
     int len;
     while ((len = s_tp->recv(frame, sizeof frame, 0)) > 0) {
+        /* Counted separately from vp_rx_offer's other false-return causes
+         * (talker lock, duplicate, too-late) - this specifically means a
+         * corrupt or foreign frame, the voice-side analogue of radio_stats'
+         * `invalid` counter (T20 §Defensive sweeps, per-source counting). */
+        if (vf_validate(frame, (size_t)len) != VF_OK) {
+            s_frame_invalid++;
+        }
         if (!transmitting) {
             (void)vp_rx_offer(&s_rx, frame, (size_t)len, now_ms());
         }
@@ -199,10 +208,13 @@ void voice_task(void *arg)
                  unit_cfg_voice_name(boot.cfg.voice));
     }
 
+    esp_task_wdt_add(NULL); /* 10 s window from sdkconfig.defaults (T20) */
     uint32_t last_beat = 0, last_retry = 0;
     bool up = false;
 
     for (;;) {
+        esp_task_wdt_reset();
+
         convoy_state_t st;
         state_snapshot(&st);
 
@@ -257,7 +269,8 @@ void voice_task(void *arg)
 
 /* ---- console diagnostic --------------------------------------------------- */
 
-void voice_task_stats(const char **transport, int *state, uint32_t *tx_seconds)
+void voice_task_stats(const char **transport, int *state, uint32_t *tx_seconds,
+                      uint32_t *frame_invalid)
 {
     if (transport != NULL) {
         *transport = (s_tp != NULL) ? s_tp->name : "none";
@@ -267,5 +280,8 @@ void voice_task_stats(const char **transport, int *state, uint32_t *tx_seconds)
     }
     if (tx_seconds != NULL) {
         *tx_seconds = s_tx_seconds;
+    }
+    if (frame_invalid != NULL) {
+        *frame_invalid = s_frame_invalid;
     }
 }
