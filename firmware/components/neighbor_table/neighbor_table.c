@@ -19,14 +19,38 @@ nt_result_t nt_update_from_beacon(nt_t *t, const cl_beacon_t *b,
         return NT_RES_OLD_IGNORED; /* defensive: cl_validate guarantees this */
     }
 
+    nt_entry_t *e = &t->e[b->hdr.sender];
+    bool first = !e->in_use;
+
+    /*
+     * Accept-after-silence (docs/05 §Sequence resync). A unit that reboots
+     * restarts its seq at 0, which every later comparison would read as
+     * "older" — leaving it invisible to us until its seq climbed past the
+     * one we remember, potentially for tens of minutes. So once we have
+     * heard nothing from a neighbour for NT_RESYNC_MS, we let it
+     * re-introduce itself with any seq at all.
+     *
+     * Note this is self-limiting: while we reject its beacons we never
+     * refresh last_heard_ms, so the silence keeps growing and the resync
+     * always fires — the invisible window is bounded by NT_RESYNC_MS
+     * rather than by how long the unit had been running.
+     */
+    bool resync = !first && (uint32_t)(int32_t)(now_ms - e->last_heard_ms) >=
+                                NT_RESYNC_MS;
+    if (resync) {
+        /* Relay bookkeeping is seq-based too, so it has to restart with
+         * the sender — otherwise we would track the rebooted unit but
+         * silently never relay for it again. */
+        e->relayed_any = false;
+        e->last_relayed_seq = 0;
+    }
+
     bool is_relay = (b->hdr.meta != 0);
     if (is_relay) {
         nt_note_relayed(t, b->hdr.sender, b->seq);
     }
 
-    nt_entry_t *e = &t->e[b->hdr.sender];
-    bool first = !e->in_use;
-    if (!first && !cl_seq_newer(b->seq, e->last_seq)) {
+    if (!first && !resync && !cl_seq_newer(b->seq, e->last_seq)) {
         return NT_RES_OLD_IGNORED;
     }
 

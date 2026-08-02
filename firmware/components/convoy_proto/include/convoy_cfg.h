@@ -58,6 +58,14 @@
 #define NT_GHOST_MS 60000u  /* STALE below this          */
 #define NT_GONE_MS 900000u  /* GHOST below this, then GONE */
 
+/* Accept-after-silence (docs/05 §Sequence resync): once a neighbour has
+ * been silent this long — i.e. it is no longer LIVE — its next beacon is
+ * accepted whatever its seq. That is what a reboot looks like from the
+ * outside, since seq restarts at 0. Tied to NT_STALE_MS deliberately: any
+ * legitimately delayed copy arrives within the relay window (<= 450 ms),
+ * so this is three orders of magnitude clear of normal reordering. */
+#define NT_RESYNC_MS NT_STALE_MS
+
 /* --- GPS (docs/05) ------------------------------------------------------ */
 #define CL_COURSE_VALID_DM_S 15 /* >= 1.5 m/s for valid course */
 

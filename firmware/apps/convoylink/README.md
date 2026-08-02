@@ -94,11 +94,10 @@ Field (two cars, 30-minute drive):
       logs).
 - [ ] Record the real maximum range seen in `tasks/STATUS.md`.
 
-**Before this drive**, read the reboot-`seq` finding at the bottom of
-`tasks/T16-radio-task.md`. Power-cycling one unit mid-convoy can make it
-invisible to the others for up to ~40 minutes — if you reboot a unit
-during testing and it never reappears, that is the known cause, not a
-wiring fault.
+Power-cycling a unit mid-convoy is safe to test: it reappears on the
+others' radar within ~15 s (`docs/05` §Sequence resync). Before that fix
+it could stay invisible for ~40 minutes — background at the bottom of
+`tasks/T16-radio-task.md`.
 
 ## Voice
 

@@ -65,10 +65,9 @@ staleness tiers behave when separating, both units run the whole drive
 without reset. This is the first "take it outside" moment — do it before
 starting voice.
 
-Before that drive, read the reboot-`seq` finding at the bottom of
-`tasks/T16-radio-task.md`: a unit power-cycled mid-convoy can stay
-invisible to still-running peers for up to ~40 minutes, and it needs an
-owner decision to fix.
+The reboot-`seq` gap found during T16 is **fixed**: a power-cycled unit
+used to stay invisible to still-running peers for up to ~40 minutes, and
+now reappears within ~15 s (`docs/05` §Sequence resync).
 
 ## M5 — Voice `v0.5` (digital, ESP-NOW)
 

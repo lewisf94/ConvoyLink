@@ -99,3 +99,19 @@ Options, all needing an owner call:
 
 Recommendation: option 2. It is the smallest change, needs no wire-format
 edit, and the staleness tiers already give a natural threshold to reuse.
+
+### Resolution (owner decision)
+
+Option 2, **accept-after-silence**, was chosen and is implemented in
+`neighbor_table` — see `docs/05` §Sequence resync for the rule and
+`NT_RESYNC_MS` in `convoy_cfg.h` for the threshold (15 s, tied to
+`NT_STALE_MS`). Relay bookkeeping resets alongside the entry, which the
+original write-up above did not call out but which matters just as much:
+it is `seq`-based too, so without the reset a rebooted unit would be
+tracked but never relayed for again.
+
+Blackout after a reboot is now bounded at ~15 s instead of ~42 min. Three
+host tests cover it (`reboot_resync_after_silence`,
+`no_resync_while_still_live`, `resync_restarts_relay_bookkeeping`), and
+the original standalone reproduction goes from 0/20 to 20/20 beacons
+accepted.

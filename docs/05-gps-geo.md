@@ -100,6 +100,34 @@ Rules:
 the convoy explicitly expects out-of-range periods — a vanished dot is worse
 than an aged one.)
 
+### Sequence resync (accept-after-silence)
+
+Beacon `seq` is compared with `cl_seq_newer()` and restarts at 0 on every
+boot, so a unit that power-cycles mid-convoy would read as permanently
+"older" to any peer still running — invisible until its fresh `seq`
+climbed past the remembered one. Measured on the real components, that is
+~500 beacons (≈ 42 min) after a 42-minute uptime, while its own radar
+looks perfectly healthy.
+
+**Rule:** once a neighbour has been silent for `NT_RESYNC_MS`
+(= `NT_STALE_MS`, 15 s — i.e. it is no longer LIVE), its next beacon is
+accepted whatever its `seq`, and that entry's relay bookkeeping
+(`last_relayed_seq`) resets with it.
+
+Two properties make this safe rather than a loosening of ordering:
+
+- It is **self-limiting**. While beacons are being rejected, `last_heard`
+  is never refreshed, so the silence keeps growing and the resync always
+  fires — the blackout is bounded by `NT_RESYNC_MS`, not by how long the
+  unit had been running.
+- It cannot fire on ordinary reordering. Any legitimately delayed copy is
+  a hop-1 relay, which arrives inside the 150–450 ms relay window
+  (`docs/03`) — three orders of magnitude short of 15 s.
+
+Resetting the relay bookkeeping is not optional: it is `seq`-based too, so
+skipping it would leave us tracking a rebooted unit while silently never
+relaying for it again, halving its effective range.
+
 ## Own-position edge cases
 
 - **No own fix**: relative geometry is impossible → radar area shows the

@@ -51,6 +51,12 @@ void nt_init(nt_t *t, uint8_t self_uid);
  * (NT_RES_UPDATED) — an equal/older seq is NT_RES_OLD_IGNORED and leaves
  * every field, including via_relay, untouched. Hop==1 beacons also mark
  * (uid, seq) as relayed (see nt_note_relayed) regardless of apply outcome.
+ *
+ * **Accept-after-silence**: the seq rule is skipped entirely once we have
+ * heard nothing from that uid for NT_RESYNC_MS, and the entry's relay
+ * bookkeeping is reset with it. A rebooted unit restarts its seq at 0, so
+ * without this it would read as permanently stale; the exception bounds
+ * that blackout to NT_RESYNC_MS (docs/05 §Sequence resync).
  */
 nt_result_t nt_update_from_beacon(nt_t *t, const cl_beacon_t *b,
                                   uint32_t now_ms);
