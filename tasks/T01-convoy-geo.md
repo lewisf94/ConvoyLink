@@ -51,9 +51,11 @@ void geo_fmt_dist(float m, char out[8]);
    10 m – 20 km. Tolerance: 0.2 % or 0.5 m, whichever is larger.
 2. **Fixtures**: 0.0009° north at same lon → dy ≈ +100.08 m, dx ≈ 0;
    pure-east offsets scale by cos(lat) (check one at 51.5°N ≈ ×0.6225).
-3. **Precision trap**: A=(515074000, −1278000), B 45 e7-units north
+3. **Precision trap**: A=(515074000, −1278000), B 450 e7-units north
    (≈5.0 m): distance must be 4.5–5.5 m. (Naive float conversion of the
-   absolute values fails this.)
+   absolute values fails this.) *Corrected: this originally said 45
+   e7-units ≈ 5.0 m, but 1 e7-unit of latitude is ~1.11 cm, so 45 is
+   ~0.5 m and 450 is the ~5 m intended. The test covers both scales.*
 4. **Bearings**: N/E/S/W cardinal cases → 0/90/180/270 (±0.5°); a NW case
    in (270, 360); A==B → 0.
 5. **Formatter**: 0→"0m", 84.6→"85m", 999.4→"999m", 1000→"1.0km",

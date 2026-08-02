@@ -22,7 +22,7 @@ proves the module and antenna.
 #include "esp_err.h"
 #include "nmea.h"
 
-/* Starts UART2 @ 9600 8N1 on CONVOY_PIN_GPS_* and an internal reader task
+/* Starts UART1 @ 9600 8N1 on CONVOY_PIN_GPS_* and an internal reader task
  * (prio 6, core 0) that feeds every byte to the nmea parser. */
 esp_err_t gps_uart_start(void);
 

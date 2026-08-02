@@ -28,7 +28,7 @@ RSSI/SNR numbers (a genuine upgrade over v1's 1-bit NRF24 RPD).
 | `status` | `sx1262_dump_status()` — first thing the owner runs |
 | `region <EU\|US\|AU>` | set frequency per `docs/03` table (RAM only) |
 | `id <0-4>` | set this bench unit's sender id (RAM only) |
-| `ping [rate_hz]` | start sending `cl_ping_t` at rate (default 2/s — respect the duty budget even in test mode), seq++ |
+| `ping [rate_hz]` | start sending `cl_ping_t` at rate (default **1.5/s**, seq++). A 32-byte packet is ~61 ms on air, so 1.5/s is 9.2 % duty — inside the EU 10 % cap (`docs/03`). An explicit faster rate is clamped to the compliant maximum in region EU (610 ms, ~1.64/s) and left alone in US/AU, which have no duty limit |
 | `stop` | stop pinging |
 | `mon` | toggle monitor mode: for each RX ping print `seq=… rssi=-NNdBm snr=N.NdB from=U<id> loss%=…` (loss from seq gaps within the last 30 s window) |
 

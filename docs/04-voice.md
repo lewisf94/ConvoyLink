@@ -101,7 +101,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  n_bytes;    /* payload length                             */
     uint8_t  seed[3];    /* ADPCM predictor(2)+index(1); 0 for Codec2  */
     uint8_t  payload[];  /* codec bytes, n_bytes long                  */
-} vf_hdr_t;              /* 9 B header; ESP-NOW frame ≈ 89 B, well under 250 */
+} vf_hdr_t;              /* 10 B header; ESP-NOW frame = 90 B, well under 250 */
 ```
 
 ### Jitter buffer & concealment (RX)

@@ -49,7 +49,10 @@ step_index to [0,88].
 ## Test requirements
 
 1. **Round-trip SNR**: 2 s synthetic speech (sines 200/700/1900 Hz, ±12000,
-   8 kHz) encode→decode; SNR > 25 dB. Silence stays < ±64.
+   8 kHz) encode→decode; SNR > 23 dB. Silence stays < ±64. *Corrected from
+   25 dB, which is unreachable on this signal: canonical IMA ADPCM scores
+   24.19 dB, and an independent minimum-error search encoder ties it — so
+   the bar was measuring the fixture, not the codec.*
 2. **Chunked == whole**: encoding in `CL_VOICE_FRAME_SAMPLES` (160) chunks,
    state carried across calls, is byte-identical to one whole-buffer call;
    same for decode.

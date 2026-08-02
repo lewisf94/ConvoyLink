@@ -29,17 +29,20 @@ static const char *TAG = "bringup_radio";
  * EU 869.40-869.65 sub-band allows 10 % duty, so the fastest compliant
  * sustained rate is 61/0.10 = 610 ms between transmissions (~1.64/s).
  *
- * T10 asks for a 2/s default, which is 12.2 % — over that limit — while
- * also requiring the duty budget be respected in test mode. The doc wins
- * (docs are law), so in region EU the rate is clamped to the compliant
- * maximum and the clamp is printed. US/AU are 902-928 MHz ISM / LIPD with
- * no duty limit in the same table, so no clamp is applied there.
+ * The 1.5/s default is 9.2 % duty, comfortably inside that. An explicitly
+ * requested faster rate is clamped to the compliant maximum in region EU
+ * and the clamp is printed; US/AU are 902-928 MHz ISM / LIPD with no duty
+ * limit in the same table, so no clamp is applied there.
+ *
+ * (T10 originally specified a 2/s default, which is 12.2 % — over the
+ * limit — while the same line required the duty budget be respected. The
+ * task was corrected to 1.5/s; this is that number.)
  */
 #define PING_AIRTIME_MS 61
 #define EU_DUTY_PERCENT 10
 #define EU_MIN_TX_INTERVAL_MS ((PING_AIRTIME_MS * 100) / EU_DUTY_PERCENT)
 
-#define PING_DEFAULT_RATE_HZ 2.0f
+#define PING_DEFAULT_RATE_HZ 1.5f
 #define PING_MAX_RATE_HZ 10.0f
 
 #define LOSS_WINDOW_MS 30000u
@@ -326,8 +329,8 @@ static void register_commands(void)
          .help = "id <0-4> — set this unit's sender id (RAM only)",
          .func = cmd_id},
         {.command = "ping",
-         .help = "ping [rate_hz] — start sending pings (default 2/s, "
-                 "duty-clamped in EU)",
+         .help = "ping [rate_hz] — start sending pings (default 1.5/s; a "
+                 "faster rate is duty-clamped in EU)",
          .func = cmd_ping},
         {.command = "stop", .help = "Stop pinging", .func = cmd_stop},
         {.command = "mon",

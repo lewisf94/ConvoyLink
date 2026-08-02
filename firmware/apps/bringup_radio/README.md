@@ -24,7 +24,7 @@ everything; exit the monitor with `Ctrl-]`.
 | `status` | Radio status/frequency, identity, and the RX counters — run this first |
 | `region <EU\|US\|AU>` | Set frequency per the `docs/03` table and re-init the radio (RAM only) |
 | `id <0-4>` | Set this bench unit's sender id (RAM only) |
-| `ping [rate_hz]` | Start sending `cl_ping_t`, seq incrementing (default 2/s) |
+| `ping [rate_hz]` | Start sending `cl_ping_t`, seq incrementing (default 1.5/s) |
 | `stop` | Stop pinging |
 | `mon` | Toggle the per-packet monitor: `seq=… rssi=…dBm snr=…dB from=U… loss%=…` |
 
@@ -35,10 +35,11 @@ T15's job. Both reset on reboot.
 
 A 32-byte packet at SF7/125 kHz/4:5 is ~61 ms on air, and the EU
 869.40–869.65 sub-band allows 10 % duty (`docs/03`), so the fastest
-compliant sustained rate is one packet per 610 ms (~1.64/s). In region
-`EU` a faster `ping` rate is clamped to that and the clamp is printed;
-`US`/`AU` sit in 902–928 MHz ISM / LIPD with no duty limit in the same
-table, so they run at the rate you ask for.
+compliant sustained rate is one packet per 610 ms (~1.64/s). The default
+1.5/s is 9.2 % duty, inside that. If you ask for something faster, region
+`EU` clamps it to the compliant maximum and says so; `US`/`AU` sit in
+902–928 MHz ISM / LIPD with no duty limit in the same table, so they run
+at the rate you ask for.
 
 ### Loss and invalid counters
 
